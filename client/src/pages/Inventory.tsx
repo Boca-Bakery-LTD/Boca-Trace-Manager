@@ -1,245 +1,425 @@
 import { useState } from "react";
 import { useBakeryStore, ReceivedLot } from "@/lib/store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, Truck, AlertTriangle } from "lucide-react";
+import { Plus, Search, Truck, AlertTriangle, FileText, Trash2, Copy, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
+interface ReceivingLineItem {
+  tempId: string;
+  ingredientTypeId: string;
+  batchCode: string;
+  bestBefore: string;
+  quantity: string;
+  storage: string;
+}
+
 export default function Inventory() {
-  const { receivedLots, ingredientTypes, users, addReceivedLot } = useBakeryStore();
+  const { 
+    receivedLots, 
+    receivingReports,
+    ingredientTypes, 
+    users, 
+    addReceivedLot, 
+    createReceivingReport 
+  } = useBakeryStore();
+
   const { toast } = useToast();
-  const [isReceivingOpen, setIsReceivingOpen] = useState(false);
+  
+  // Modal States
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isViewReportOpen, setIsViewReportOpen] = useState(false);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+
+  // Filters
   const [filter, setFilter] = useState("");
 
-  // Form State
-  const [formData, setFormData] = useState({
-    ingredientTypeId: "",
-    batchCode: "",
-    bestBefore: "",
-    quantity: "",
+  // Create Report Form State
+  const [reportData, setReportData] = useState({
+    receivedAtDate: format(new Date(), "yyyy-MM-dd"),
+    receivedAtTime: format(new Date(), "HH:mm"),
     receivedByUserId: "",
-    storage: "Ambient",
+    reference: "",
     notes: ""
   });
 
-  const handleSubmit = () => {
-    if (!formData.ingredientTypeId || !formData.batchCode || !formData.receivedByUserId) {
-      toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
+  const [lines, setLines] = useState<ReceivingLineItem[]>([
+    { tempId: '1', ingredientTypeId: '', batchCode: '', bestBefore: '', quantity: '', storage: 'Ambient' }
+  ]);
+
+  // View Report Helper
+  const viewReport = receivingReports.find(r => r.id === selectedReportId);
+  const viewReportLines = selectedReportId ? receivedLots.filter(l => l.receivingReportId === selectedReportId) : [];
+
+  const handleAddLine = () => {
+    setLines([...lines, { 
+      tempId: Math.random().toString(), 
+      ingredientTypeId: '', 
+      batchCode: '', 
+      bestBefore: '', 
+      quantity: '', 
+      storage: 'Ambient' 
+    }]);
+  };
+
+  const handleDuplicateLine = (line: ReceivingLineItem) => {
+    setLines([...lines, { 
+      ...line, 
+      tempId: Math.random().toString(),
+      batchCode: '' // Clear batch code as that should be unique usually
+    }]);
+  };
+
+  const handleRemoveLine = (id: string) => {
+    if (lines.length > 1) {
+      setLines(lines.filter(l => l.tempId !== id));
+    }
+  };
+
+  const updateLine = (id: string, field: keyof ReceivingLineItem, value: string) => {
+    setLines(lines.map(l => {
+      if (l.tempId === id) {
+        const updated = { ...l, [field]: value };
+        // Auto-set storage based on ingredient type if ingredient changes
+        if (field === 'ingredientTypeId') {
+          const type = ingredientTypes.find(t => t.id === value);
+          if (type) updated.storage = type.storage;
+        }
+        return updated;
+      }
+      return l;
+    }));
+  };
+
+  const handleSubmitReport = () => {
+    if (!reportData.receivedByUserId) {
+      toast({ title: "Error", description: "Please select who received the goods", variant: "destructive" });
       return;
     }
 
-    const type = ingredientTypes.find(t => t.id === formData.ingredientTypeId);
+    const validLines = lines.filter(l => l.ingredientTypeId && l.batchCode);
+    if (validLines.length === 0) {
+      toast({ title: "Error", description: "Add at least one valid line item", variant: "destructive" });
+      return;
+    }
 
-    addReceivedLot({
-      ingredientTypeId: formData.ingredientTypeId,
-      batchCode: formData.batchCode,
-      bestBefore: formData.bestBefore || format(new Date(Date.now() + 30*24*60*60*1000), "yyyy-MM-dd"), // Default 30 days
-      receivedAt: new Date().toISOString(),
-      receivedByUserId: formData.receivedByUserId,
-      quantity: Number(formData.quantity) || 0,
-      unit: type?.defaultUnit || 'kg',
-      storage: (formData.storage as any) || type?.storage || 'Ambient',
-      notes: formData.notes
+    const receivedAt = new Date(`${reportData.receivedAtDate}T${reportData.receivedAtTime}`).toISOString();
+
+    createReceivingReport({
+      receivedAt,
+      receivedByUserId: reportData.receivedByUserId,
+      reference: reportData.reference,
+      notes: reportData.notes
+    }, validLines.map(l => {
+      const type = ingredientTypes.find(t => t.id === l.ingredientTypeId);
+      return {
+        ingredientTypeId: l.ingredientTypeId,
+        batchCode: l.batchCode,
+        bestBefore: l.bestBefore || format(new Date(Date.now() + 30*24*60*60*1000), "yyyy-MM-dd"),
+        quantity: Number(l.quantity) || 0,
+        unit: type?.defaultUnit || 'kg',
+        storage: (l.storage as any),
+        receivedByUserId: reportData.receivedByUserId, // Will be overridden by store but good for type safety
+        receivedAt: receivedAt // Will be overridden
+      };
+    }));
+
+    toast({ title: "Success", description: `Report created with ${validLines.length} lines` });
+    setIsReportOpen(false);
+    
+    // Reset Form
+    setReportData({
+      receivedAtDate: format(new Date(), "yyyy-MM-dd"),
+      receivedAtTime: format(new Date(), "HH:mm"),
+      receivedByUserId: "",
+      reference: "",
+      notes: ""
     });
-
-    toast({ title: "Success", description: "Lot received successfully" });
-    setIsReceivingOpen(false);
-    setFormData({ ...formData, batchCode: "", quantity: "", notes: "" }); // Reset some fields
+    setLines([{ tempId: '1', ingredientTypeId: '', batchCode: '', bestBefore: '', quantity: '', storage: 'Ambient' }]);
   };
 
-  const filteredLots = receivedLots.filter(l => 
-    l.batchCode.toLowerCase().includes(filter.toLowerCase()) || 
-    ingredientTypes.find(t => t.id === l.ingredientTypeId)?.name.toLowerCase().includes(filter.toLowerCase())
-  );
-
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-6">
         <div>
           <h2 className="text-3xl font-display font-bold text-primary tracking-tight">Inventory & Receiving</h2>
           <p className="text-muted-foreground">Manage incoming raw materials and stock.</p>
         </div>
         
-        <Dialog open={isReceivingOpen} onOpenChange={setIsReceivingOpen}>
+        <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
           <DialogTrigger asChild>
             <Button size="lg" className="bg-primary hover:bg-primary/90 text-white gap-2 font-semibold">
-              <Truck className="w-5 h-5" />
-              Receive New Lot
+              <FileText className="w-5 h-5" />
+              Create Receiving Report
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Receive Goods</DialogTitle>
+              <DialogTitle className="text-xl font-display">New Receiving Report</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label>Ingredient Type</Label>
-                  <Select 
-                    value={formData.ingredientTypeId} 
-                    onValueChange={(val) => {
-                      const type = ingredientTypes.find(t => t.id === val);
-                      setFormData({ ...formData, ingredientTypeId: val, storage: type?.storage || 'Ambient' });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Ingredient..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ingredientTypes.map(t => (
-                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="col-span-2">
-                  <Label>Supplier Batch Code</Label>
-                  <Input 
-                    placeholder="e.g. LOT-123-ABC" 
-                    className="font-mono"
-                    value={formData.batchCode}
-                    onChange={e => setFormData({ ...formData, batchCode: e.target.value })}
-                  />
-                </div>
-
+            
+            <div className="space-y-6 py-4">
+              {/* Report Header Details */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-muted/30 p-4 rounded-lg border">
                 <div>
-                  <Label>Best Before</Label>
-                  <Input 
-                    type="date" 
-                    value={formData.bestBefore}
-                    onChange={e => setFormData({ ...formData, bestBefore: e.target.value })}
-                  />
+                  <Label>Date</Label>
+                  <Input type="date" value={reportData.receivedAtDate} onChange={e => setReportData({...reportData, receivedAtDate: e.target.value})} />
                 </div>
-
                 <div>
-                  <Label>Storage</Label>
-                  <Select value={formData.storage} onValueChange={val => setFormData({ ...formData, storage: val })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Ambient">Ambient</SelectItem>
-                      <SelectItem value="Chilled">Chilled</SelectItem>
-                      <SelectItem value="Frozen">Frozen</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Time</Label>
+                  <Input type="time" value={reportData.receivedAtTime} onChange={e => setReportData({...reportData, receivedAtTime: e.target.value})} />
                 </div>
-
-                <div>
-                  <Label>Quantity</Label>
-                  <Input 
-                    type="number" 
-                    placeholder="0"
-                    value={formData.quantity}
-                    onChange={e => setFormData({ ...formData, quantity: e.target.value })}
-                  />
-                </div>
-
-                <div className="col-span-2">
+                 <div className="md:col-span-2">
                    <Label>Received By (Sign-off)</Label>
-                   <div className="grid grid-cols-3 gap-2 mt-1">
-                     {users.filter(u => u.role !== 'Admin').map(user => (
-                       <div 
-                         key={user.id}
-                         onClick={() => setFormData({ ...formData, receivedByUserId: user.id })}
-                         className={cn(
-                           "cursor-pointer border rounded-md p-2 text-center text-sm transition-all",
-                           formData.receivedByUserId === user.id ? "bg-primary text-white border-primary ring-2 ring-offset-1 ring-primary" : "hover:bg-muted"
-                         )}
-                       >
-                         {user.name}
-                       </div>
-                     ))}
-                   </div>
+                   <Select value={reportData.receivedByUserId} onValueChange={v => setReportData({...reportData, receivedByUserId: v})}>
+                     <SelectTrigger className={cn(!reportData.receivedByUserId && "border-primary")}>
+                       <SelectValue placeholder="Select Staff Member..." />
+                     </SelectTrigger>
+                     <SelectContent>
+                       {users.filter(u => u.role !== 'Admin').map(u => (
+                         <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                       ))}
+                     </SelectContent>
+                   </Select>
                 </div>
-                
-                <div className="col-span-2">
-                  <Label>Notes (Optional)</Label>
-                  <Input 
-                    placeholder="Damaged box, check temp, etc."
-                    value={formData.notes}
-                    onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                  />
+                <div className="md:col-span-2">
+                  <Label>Delivery Ref / Supplier</Label>
+                  <Input placeholder="e.g. INV-9901 from GrainCo" value={reportData.reference} onChange={e => setReportData({...reportData, reference: e.target.value})} />
+                </div>
+                <div className="md:col-span-2">
+                  <Label>Notes</Label>
+                  <Input placeholder="e.g. Pallet slightly damaged" value={reportData.notes} onChange={e => setReportData({...reportData, notes: e.target.value})} />
                 </div>
               </div>
-              
-              <Button onClick={handleSubmit} className="w-full mt-4" size="lg">Confirm Receipt</Button>
+
+              {/* Lines */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                   <h3 className="font-bold text-lg">Line Items</h3>
+                   <Button size="sm" variant="outline" onClick={handleAddLine}><Plus className="w-4 h-4 mr-2" /> Add Line</Button>
+                </div>
+                
+                <div className="border rounded-md overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-muted">
+                      <TableRow>
+                        <TableHead className="w-[200px]">Ingredient</TableHead>
+                        <TableHead className="w-[150px]">Batch Code</TableHead>
+                        <TableHead className="w-[130px]">Best Before</TableHead>
+                        <TableHead className="w-[100px]">Qty</TableHead>
+                        <TableHead className="w-[120px]">Storage</TableHead>
+                        <TableHead className="w-[100px] text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {lines.map((line, idx) => (
+                        <TableRow key={line.tempId} className="hover:bg-muted/10">
+                          <TableCell>
+                             <Select value={line.ingredientTypeId} onValueChange={v => updateLine(line.tempId, 'ingredientTypeId', v)}>
+                               <SelectTrigger>
+                                 <SelectValue placeholder="Select..." />
+                               </SelectTrigger>
+                               <SelectContent>
+                                 {ingredientTypes.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                               </SelectContent>
+                             </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Input 
+                              placeholder="Batch #" 
+                              value={line.batchCode} 
+                              onChange={e => updateLine(line.tempId, 'batchCode', e.target.value)}
+                              className="font-mono"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input 
+                              type="date" 
+                              value={line.bestBefore} 
+                              onChange={e => updateLine(line.tempId, 'bestBefore', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input 
+                              type="number" 
+                              placeholder="0"
+                              value={line.quantity} 
+                              onChange={e => updateLine(line.tempId, 'quantity', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                             <Select value={line.storage} onValueChange={v => updateLine(line.tempId, 'storage', v)}>
+                               <SelectTrigger>
+                                 <SelectValue />
+                               </SelectTrigger>
+                               <SelectContent>
+                                 <SelectItem value="Ambient">Ambient</SelectItem>
+                                 <SelectItem value="Chilled">Chilled</SelectItem>
+                                 <SelectItem value="Frozen">Frozen</SelectItem>
+                               </SelectContent>
+                             </Select>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" title="Duplicate" onClick={() => handleDuplicateLine(line)}>
+                                <Copy className="w-4 h-4 text-muted-foreground" />
+                              </Button>
+                              <Button variant="ghost" size="icon" title="Remove" onClick={() => handleRemoveLine(line.tempId)} disabled={lines.length === 1}>
+                                <Trash2 className="w-4 h-4 text-rose-500" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t flex justify-end gap-3">
+                 <Button variant="outline" onClick={() => setIsReportOpen(false)}>Cancel</Button>
+                 <Button size="lg" onClick={handleSubmitReport} className="font-bold">Save Report</Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="flex gap-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search batch codes..." 
-            className="pl-9"
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-          />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Reports List */}
+        <div className="lg:col-span-2 space-y-4">
+           <h3 className="font-bold text-xl flex items-center gap-2">
+             <FileText className="w-5 h-5 text-muted-foreground" />
+             Recent Reports
+           </h3>
+           
+           <div className="bg-white rounded-md border shadow-sm">
+             <Table>
+               <TableHeader>
+                 <TableRow>
+                   <TableHead>Date</TableHead>
+                   <TableHead>Reference</TableHead>
+                   <TableHead>Received By</TableHead>
+                   <TableHead>Lines</TableHead>
+                   <TableHead></TableHead>
+                 </TableRow>
+               </TableHeader>
+               <TableBody>
+                 {receivingReports.length === 0 ? (
+                   <TableRow>
+                     <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No reports yet.</TableCell>
+                   </TableRow>
+                 ) : (
+                   receivingReports.sort((a,b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()).map(report => (
+                     <TableRow key={report.id}>
+                       <TableCell className="font-mono text-xs">{format(new Date(report.receivedAt), "dd/MM/yy HH:mm")}</TableCell>
+                       <TableCell>{report.reference || '-'}</TableCell>
+                       <TableCell>{users.find(u => u.id === report.receivedByUserId)?.name}</TableCell>
+                       <TableCell><Badge variant="outline">{report.lotIds.length} items</Badge></TableCell>
+                       <TableCell>
+                         <Button variant="ghost" size="sm" onClick={() => { setSelectedReportId(report.id); setIsViewReportOpen(true); }}>
+                           <Eye className="w-4 h-4 mr-2" /> View
+                         </Button>
+                       </TableCell>
+                     </TableRow>
+                   ))
+                 )}
+               </TableBody>
+             </Table>
+           </div>
+        </div>
+        
+        {/* Helper Side Panel for Individual Lots (Quick Lookup) */}
+        <div className="space-y-4">
+           <h3 className="font-bold text-xl flex items-center gap-2">
+             <Search className="w-5 h-5 text-muted-foreground" />
+             Lot Lookup
+           </h3>
+           <Input 
+             placeholder="Search batch codes..." 
+             value={filter}
+             onChange={e => setFilter(e.target.value)}
+             className="bg-white"
+           />
+           <div className="bg-white rounded-md border shadow-sm max-h-[500px] overflow-y-auto">
+             {receivedLots
+               .filter(l => !filter || l.batchCode.toLowerCase().includes(filter.toLowerCase()))
+               .sort((a,b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime())
+               .slice(0, 20)
+               .map(lot => {
+                 const type = ingredientTypes.find(t => t.id === lot.ingredientTypeId);
+                 return (
+                   <div key={lot.id} className="p-3 border-b last:border-0 hover:bg-muted/20">
+                     <div className="flex justify-between items-start mb-1">
+                       <span className="font-bold font-mono text-sm">{lot.batchCode}</span>
+                       <Badge variant="outline" className="text-[10px]">{lot.storage}</Badge>
+                     </div>
+                     <p className="text-sm font-medium">{type?.name}</p>
+                     <p className="text-xs text-muted-foreground mt-1 flex justify-between">
+                       <span>Qty: {lot.quantity} {lot.unit}</span>
+                       <span className={cn(new Date(lot.bestBefore) < new Date() ? "text-rose-500 font-bold" : "")}>BB: {lot.bestBefore}</span>
+                     </p>
+                   </div>
+                 )
+               })
+             }
+           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-md border shadow-sm">
-        <Table>
-          <TableHeader className="bg-muted/50">
-            <TableRow>
-              <TableHead>Received</TableHead>
-              <TableHead>Ingredient</TableHead>
-              <TableHead>Batch Code</TableHead>
-              <TableHead>Best Before</TableHead>
-              <TableHead>Storage</TableHead>
-              <TableHead>Qty</TableHead>
-              <TableHead>Receiver</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredLots.length === 0 ? (
-               <TableRow>
-                 <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No lots found.</TableCell>
-               </TableRow>
-            ) : (
-              filteredLots.map((lot) => {
-                const type = ingredientTypes.find(t => t.id === lot.ingredientTypeId);
-                const user = users.find(u => u.id === lot.receivedByUserId);
-                return (
-                  <TableRow key={lot.id}>
-                    <TableCell className="font-mono text-xs">{format(new Date(lot.receivedAt), "dd/MM/yy HH:mm")}</TableCell>
-                    <TableCell className="font-medium">{type?.name}</TableCell>
-                    <TableCell className="font-mono font-bold">{lot.batchCode}</TableCell>
-                    <TableCell className={cn(
-                      new Date(lot.bestBefore) < new Date() ? "text-rose-600 font-bold flex items-center gap-1" : ""
-                    )}>
-                      {new Date(lot.bestBefore) < new Date() && <AlertTriangle className="w-3 h-3" />}
-                      {lot.bestBefore}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={cn(
-                        lot.storage === 'Chilled' ? "bg-blue-50 text-blue-700 border-blue-200" :
-                        lot.storage === 'Frozen' ? "bg-cyan-50 text-cyan-700 border-cyan-200" : "bg-orange-50 text-orange-700 border-orange-200"
-                      )}>
-                        {lot.storage}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{lot.quantity} {lot.unit}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{user?.name}</TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      {/* View Report Dialog */}
+      <Dialog open={isViewReportOpen} onOpenChange={setIsViewReportOpen}>
+         <DialogContent className="max-w-4xl">
+           <DialogHeader>
+             <DialogTitle>Receiving Report Details</DialogTitle>
+             <CardDescription>
+                {viewReport && `${format(new Date(viewReport.receivedAt), "PPP p")} • Ref: ${viewReport.reference || 'N/A'}`}
+             </CardDescription>
+           </DialogHeader>
+           
+           <div className="border rounded-md overflow-hidden mt-4">
+             <Table>
+               <TableHeader className="bg-muted">
+                 <TableRow>
+                   <TableHead>Ingredient</TableHead>
+                   <TableHead>Batch Code</TableHead>
+                   <TableHead>Best Before</TableHead>
+                   <TableHead>Qty</TableHead>
+                   <TableHead>Storage</TableHead>
+                 </TableRow>
+               </TableHeader>
+               <TableBody>
+                 {viewReportLines.map(lot => {
+                    const type = ingredientTypes.find(t => t.id === lot.ingredientTypeId);
+                    return (
+                      <TableRow key={lot.id}>
+                        <TableCell className="font-medium">{type?.name}</TableCell>
+                        <TableCell className="font-mono font-bold">{lot.batchCode}</TableCell>
+                        <TableCell className={cn(new Date(lot.bestBefore) < new Date() ? "text-rose-600 font-bold" : "")}>
+                          {lot.bestBefore}
+                        </TableCell>
+                        <TableCell>{lot.quantity} {lot.unit}</TableCell>
+                        <TableCell>{lot.storage}</TableCell>
+                      </TableRow>
+                    )
+                 })}
+               </TableBody>
+             </Table>
+           </div>
+
+           <div className="mt-4 bg-muted/30 p-3 rounded text-sm text-muted-foreground">
+              Notes: {viewReport?.notes || 'None'}
+           </div>
+         </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -22,9 +22,20 @@ export interface IngredientType {
   storage: StorageCondition;
 }
 
+// "Receiving Report" - A document grouping multiple received lots
+export interface ReceivingReport {
+  id: string;
+  receivedAt: string; // ISO
+  receivedByUserId: string;
+  reference?: string; // Delivery Ref / Supplier
+  notes?: string;
+  lotIds: string[]; // Linked lots
+}
+
 // "Received Lot" - Raw material entering the bakery
 export interface ReceivedLot {
   id: string;
+  receivingReportId?: string; // Link to parent report
   ingredientTypeId: string;
   batchCode: string;
   receivedAt: string; // ISO
@@ -83,6 +94,7 @@ interface BakeryStore {
   users: User[];
   ingredientTypes: IngredientType[];
   receivedLots: ReceivedLot[];
+  receivingReports: ReceivingReport[];
   dailyLog: DailyLogEntry[];
   batches: Batch[];
   productionRuns: ProductionRun[];
@@ -91,6 +103,7 @@ interface BakeryStore {
   // Actions
   addUser: (user: Omit<User, 'id'>) => void;
   addReceivedLot: (lot: Omit<ReceivedLot, 'id'>) => void;
+  createReceivingReport: (report: Omit<ReceivingReport, 'id' | 'lotIds'>, lots: Omit<ReceivedLot, 'id' | 'receivingReportId'>[]) => void;
   updateDailyLog: (date: string, ingredientTypeId: string, lotId: string) => void;
   createBatch: (batch: Omit<Batch, 'id'>) => void;
   createProductionRun: (run: Omit<ProductionRun, 'id'>) => void;
@@ -132,6 +145,7 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
   users: INITIAL_USERS,
   ingredientTypes: INITIAL_INGREDIENTS,
   receivedLots: INITIAL_LOTS,
+  receivingReports: [],
   dailyLog: [],
   batches: [],
   productionRuns: [],
@@ -147,6 +161,32 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
       receivedLots: [...state.receivedLots, { ...lot, id }],
     }));
     get().addAuditLog('RECEIVE_GOODS', `Received ${lot.batchCode}`, lot.receivedByUserId);
+  },
+
+  createReceivingReport: (report, lots) => {
+    const reportId = Math.random().toString(36).substr(2, 9);
+    
+    // Create Lot records linked to report
+    const newLots: ReceivedLot[] = lots.map(l => ({
+      ...l,
+      id: Math.random().toString(36).substr(2, 9),
+      receivingReportId: reportId,
+      receivedAt: report.receivedAt, // Inherit report time
+      receivedByUserId: report.receivedByUserId // Inherit receiver
+    }));
+
+    const newReport: ReceivingReport = {
+      ...report,
+      id: reportId,
+      lotIds: newLots.map(l => l.id)
+    };
+
+    set((state) => ({
+      receivingReports: [newReport, ...state.receivingReports],
+      receivedLots: [...state.receivedLots, ...newLots]
+    }));
+
+    get().addAuditLog('CREATE_RECEIVING_REPORT', `Created Report with ${newLots.length} lines`, report.receivedByUserId);
   },
 
   updateDailyLog: (date, ingredientTypeId, lotId) => {
