@@ -1,14 +1,17 @@
 import { Link, useLocation } from "wouter";
 import { 
-  LayoutDashboard, 
-  Package, 
+  ClipboardList, 
+  Truck, 
+  ChefHat, 
+  UtensilsCrossed, 
   Factory, 
   Search, 
-  AlertTriangle, 
-  Settings, 
+  Siren, 
+  Users, 
+  Settings,
   LogOut,
   Menu,
-  Box
+  History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -16,13 +19,15 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", icon: LayoutDashboard, href: "/" },
-  { label: "Inventory & Lots", icon: Package, href: "/inventory" },
-  { label: "Production", icon: Factory, href: "/production" },
+  { label: "Daily Log", icon: ClipboardList, href: "/" },
+  { label: "Inventory & Receiving", icon: Truck, href: "/inventory" },
+  { label: "Dough Batches", icon: ChefHat, href: "/dough" },
+  { label: "Filling Batches", icon: UtensilsCrossed, href: "/filling" },
+  { label: "Production Runs", icon: Factory, href: "/production" },
   { label: "Traceability", icon: Search, href: "/trace" },
-  { label: "Recalls & Holds", icon: AlertTriangle, href: "/recalls" },
-  { label: "Master Data", icon: Box, href: "/master-data" },
-  { label: "Settings", icon: Settings, href: "/settings" },
+  { label: "Recall Test", icon: Siren, href: "/recall" },
+  { label: "Users", icon: Users, href: "/users" },
+  { label: "Audit Log", icon: History, href: "/audit" },
 ];
 
 export default function Sidebar() {
@@ -35,7 +40,7 @@ export default function Sidebar() {
         <h1 className="text-2xl font-display font-bold tracking-tight text-sidebar-primary-foreground">
           BOCA<span className="text-sidebar-primary">BAKERY</span>
         </h1>
-        <p className="text-xs text-sidebar-foreground/60 mt-1 uppercase tracking-widest">Traceability System</p>
+        <p className="text-xs text-sidebar-foreground/60 mt-1 uppercase tracking-widest">Production Log</p>
       </div>
 
       <div className="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
@@ -67,7 +72,7 @@ export default function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">John Doe</p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">QA Manager</p>
+            <p className="text-xs text-sidebar-foreground/60 truncate">Production Mgr</p>
           </div>
         </div>
         <Button variant="ghost" className="w-full justify-start text-sidebar-foreground/60 hover:text-white hover:bg-sidebar-accent">

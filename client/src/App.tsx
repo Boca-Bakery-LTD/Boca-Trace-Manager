@@ -4,29 +4,37 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import Sidebar from "@/components/layout/Sidebar";
-import Dashboard from "@/pages/Dashboard";
-import Traceability from "@/pages/Traceability";
+import DailyLog from "@/pages/DailyLog";
 import Inventory from "@/pages/Inventory";
-import { Button } from "@/components/ui/button";
+import DoughBatches from "@/pages/DoughBatches";
+import FillingBatches from "@/pages/FillingBatches";
+import ProductionRuns from "@/pages/ProductionRuns";
+import Traceability from "@/pages/Traceability";
+import RecallTest from "@/pages/RecallTest";
+
+// Placeholder Pages
+const PlaceHolder = ({ title }: { title: string }) => (
+  <div className="flex flex-col items-center justify-center h-[50vh] text-muted-foreground">
+    <h1 className="text-2xl font-bold mb-2">{title}</h1>
+    <p>This module is under construction.</p>
+  </div>
+);
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/trace" component={Traceability} />
+      <Route path="/" component={DailyLog} />
       <Route path="/inventory" component={Inventory} />
-      {/* Fallbacks for unfinished pages to avoid 404 for nav demo */}
-      <Route path="/production">
-        <div className="p-8 text-center text-muted-foreground">Production Module Placeholder</div>
+      <Route path="/dough" component={DoughBatches} />
+      <Route path="/filling" component={FillingBatches} />
+      <Route path="/production" component={ProductionRuns} />
+      <Route path="/trace" component={Traceability} />
+      <Route path="/recall" component={RecallTest} />
+      <Route path="/users">
+        <PlaceHolder title="User Management" />
       </Route>
-      <Route path="/recalls">
-        <div className="p-8 text-center text-muted-foreground">Recall Management Placeholder</div>
-      </Route>
-      <Route path="/master-data">
-        <div className="p-8 text-center text-muted-foreground">Master Data Placeholder</div>
-      </Route>
-      <Route path="/settings">
-        <div className="p-8 text-center text-muted-foreground">Settings Placeholder</div>
+      <Route path="/audit">
+        <PlaceHolder title="Audit Logs" />
       </Route>
       <Route component={NotFound} />
     </Switch>
@@ -34,9 +42,6 @@ function Router() {
 }
 
 function App() {
-  const [location] = useLocation();
-  
-  // Minimal "Login" check mock - could add a real login screen but for now just show app
   return (
     <QueryClientProvider client={queryClient}>
       <div className="min-h-screen bg-background font-sans text-foreground flex">
