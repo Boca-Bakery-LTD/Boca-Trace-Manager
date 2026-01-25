@@ -1,0 +1,105 @@
+Goal: Implement supplier-initiated ingredient lot tracing + inventory lot lookup, and ensure the data model supports reliable forward-trace from an ingredient lot batch code to dough/filling batches and then to production runs/product batch codes (ddmmyy), with an Environmental Officer–friendly recall verification report.
+
+A) DATA MODEL (persistent, relational)
+1) Ingredient Types (master list)
+- id, name (unique), active
+
+2) Receiving Reports (header)
+- id, received_at (datetime), received_by_user_id, supplier_name (optional), delivery_ref (optional), notes (optional), created_by_user_id, created_at
+- One report has many lines.
+
+3) Receiving Report Lines / Received Lots (line items)
+- id, receiving_report_id (FK), ingredient_type_id (FK), batch_code (text, indexed), best_before (date), storage_condition (enum: Frozen/Chilled/Ambient), quantity (number, optional), unit (text, optional), created_at
+- IMPORTANT: store batch_code in normalized form for searching (e.g., trimmed, uppercase) + index it.
+
+4) Dough Batches (header)
+- id, dough_batch_code (unique), recipe_name, created_at, created_by_user_id, notes (optional)
+
+5) Filling Batches (header)
+- id, filling_batch_code (unique), recipe_name, created_at, created_by_user_id, notes (optional)
+
+6) Dough Batch Ingredients (join table)
+- id, dough_batch_id (FK), received_lot_line_id (FK to receiving report line), quantity (optional), unit (optional)
+
+7) Filling Batch Ingredients (join table)
+- id, filling_batch_id (FK), received_lot_line_id (FK), quantity (optional), unit (optional)
+
+8) Production Runs
+- id, product_name/SKU, product_batch_code (ddmmyy, indexed), produced_at (datetime), quantity (optional), created_by_user_id
+- Trace preference field: trace_preference enum (DoughOnly/FillingOnly/Both)
+
+9) Production Run Links
+- production_run_id (FK)
+- link dough batches: production_run_dough_batches (run_id, dough_batch_id)
+- link filling batches: production_run_filling_batches (run_id, filling_batch_id)
+
+10) Audit Log
+- id, event_type, user_id, entity_type, entity_id, metadata_json, created_at
+- Add events for: receiving_report_created, received_lot_created, dough_batch_created, filling_batch_created, production_run_created, trace_searched, recall_test_run.
+
+B) INVENTORY/RECEIVING: LOT LOOKUP + REPORT CONTEXT
+1) Add an “Inventory Lot Lookup” search box (case-insensitive, partial match).
+- Search by received lot batch_code; optionally filter by ingredient type dropdown.
+- Results show:
+  - Ingredient type name
+  - Batch code
+  - Best before
+  - Storage condition
+  - Quantity/unit
+  - Receiving report it arrived in: received_at, received_by, supplier_name/delivery_ref (if present)
+  - Button/link: “Open Receiving Report” to view the full report with all lines.
+
+2) Ensure receiving report lines are created in bulk from the Receiving Report multi-line screen (already in app), but now clearly link each line to its parent report.
+
+C) TRACEABILITY: ADD “INGREDIENT BATCH TRACE” (FORWARD TRACE)
+Add a Traceability search mode: “Ingredient Batch Code”.
+Inputs:
+- Batch code (required)
+- Ingredient type dropdown (optional, limits matches)
+Search must:
+1) Find all received lots (receiving report lines) whose batch_code matches the query (case-insensitive, partial).
+2) For each matched received lot, find:
+   a) Dough batches that reference it via dough_batch_ingredients
+   b) Filling batches that reference it via filling_batch_ingredients
+3) From those dough/filling batches, find all Production Runs that link to those batches (via run links).
+4) Output a clear tree report:
+   - Matched Ingredient Lot (ingredient type + batch code)
+   - Parent Receiving Report (received_at, received_by, supplier/ref)
+   - Dough batches impacted (with dough_batch_code, created_at)
+   - Filling batches impacted (with filling_batch_code, created_at)
+   - Production Runs impacted (product name, produced_at, product_batch_code ddmmyy, trace_preference)
+5) Include filters/toggles in the report:
+   - Show impacts via Dough only / Filling only / Both
+   - Respect production run trace_preference when summarizing (but still show full linkage when user expands details).
+6) Provide a print-friendly view (simple “Print” button that opens a clean report page).
+7) Write an Audit Log entry on each search: event_type=trace_searched, metadata includes search mode, batch code, optional ingredient type, result counts.
+
+D) RECALL TEST: ENVIRONMENTAL OFFICER VERIFICATION REPORT
+In “Recall Test” section:
+1) Add option: “Recall by Ingredient Batch Code” with optional ingredient type filter.
+2) Run the same forward-trace logic as in Traceability.
+3) Output a “Verification Report” view that is structured and easy to review:
+   - What was searched (batch code, ingredient type)
+   - Date/time run + user
+   - Receiving report(s) where it arrived
+   - Dough batches impacted
+   - Filling batches impacted
+   - Production runs + product batch codes impacted
+   - A clear statement like: “System identified X impacted product batches across Y production runs.”
+4) Add a Print button and an audit log entry: event_type=recall_test_run with metadata.
+
+E) UX REQUIREMENTS
+- Keep tablet-friendly layout: large inputs, minimal scrolling, clear headings.
+- Empty states: “No received lots found for this batch code.” and “No production runs linked yet.”
+- Performance: add indexes on normalized batch_code and product_batch_code; use server-side filtering.
+- Ensure all tracing uses FK links (received lot IDs → batch ingredient join → production run links), not free-text.
+
+F) MIGRATION/SEED DATA
+- If existing tables/data differ, write a migration path that preserves current records where possible.
+- Seed a few receiving reports, dough/filling batches, and production runs so the feature can be tested immediately.
+
+Implement end-to-end, update the UI navigation to include:
+- Inventory Lot Lookup
+- Traceability > Ingredient Batch Trace
+- Recall Test > Recall by Ingredient Batch Code
+And ensure these features work with persisted data across sessions.

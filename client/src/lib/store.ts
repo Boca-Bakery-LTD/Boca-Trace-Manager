@@ -88,6 +88,34 @@ export interface AuditEvent {
   userId: string;
 }
 
+// "Dough Batch Ingredients" - Join table for Dough -> ReceivedLot
+export interface DoughBatchIngredient {
+  id: string;
+  doughBatchId: string;
+  receivedLotId: string;
+}
+
+// "Filling Batch Ingredients" - Join table for Filling -> ReceivedLot
+export interface FillingBatchIngredient {
+  id: string;
+  fillingBatchId: string;
+  receivedLotId: string;
+}
+
+// "Production Run Dough Batches" - Join table for Run -> Dough
+export interface ProductionRunDoughBatch {
+  id: string;
+  productionRunId: string;
+  doughBatchId: string;
+}
+
+// "Production Run Filling Batches" - Join table for Run -> Filling
+export interface ProductionRunFillingBatch {
+  id: string;
+  productionRunId: string;
+  fillingBatchId: string;
+}
+
 // --- Store State ---
 
 interface BakeryStore {
@@ -97,7 +125,11 @@ interface BakeryStore {
   receivingReports: ReceivingReport[];
   dailyLog: DailyLogEntry[];
   batches: Batch[];
+  doughBatchIngredients: DoughBatchIngredient[];
+  fillingBatchIngredients: FillingBatchIngredient[];
   productionRuns: ProductionRun[];
+  productionRunDoughBatches: ProductionRunDoughBatch[];
+  productionRunFillingBatches: ProductionRunFillingBatch[];
   auditLog: AuditEvent[];
 
   // Actions
@@ -107,7 +139,7 @@ interface BakeryStore {
   updateDailyLog: (date: string, ingredientTypeId: string, lotId: string) => void;
   createBatch: (batch: Omit<Batch, 'id'>) => void;
   createProductionRun: (run: Omit<ProductionRun, 'id'>) => void;
-  addAuditLog: (action: string, details: string, userId: string) => void;
+  addAuditLog: (action: string, details: string, userId: string, entityType?: string, entityId?: string) => void;
   
   // Helpers
   getLotsForIngredient: (typeId: string) => ReceivedLot[];
@@ -148,7 +180,11 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
   receivingReports: [],
   dailyLog: [],
   batches: [],
+  doughBatchIngredients: [],
+  fillingBatchIngredients: [],
   productionRuns: [],
+  productionRunDoughBatches: [],
+  productionRunFillingBatches: [],
   auditLog: [],
 
   addUser: (user) => set((state) => ({ 
@@ -160,7 +196,7 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
     set((state) => ({
       receivedLots: [...state.receivedLots, { ...lot, id }],
     }));
-    get().addAuditLog('RECEIVE_GOODS', `Received ${lot.batchCode}`, lot.receivedByUserId);
+    get().addAuditLog('RECEIVE_GOODS', `Received ${lot.batchCode}`, lot.receivedByUserId, 'ReceivedLot', id);
   },
 
   createReceivingReport: (report, lots) => {
@@ -186,7 +222,7 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
       receivedLots: [...state.receivedLots, ...newLots]
     }));
 
-    get().addAuditLog('CREATE_RECEIVING_REPORT', `Created Report with ${newLots.length} lines`, report.receivedByUserId);
+    get().addAuditLog('CREATE_RECEIVING_REPORT', `Created Report with ${newLots.length} lines`, report.receivedByUserId, 'ReceivingReport', reportId);
   },
 
   updateDailyLog: (date, ingredientTypeId, lotId) => {
@@ -208,29 +244,54 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
 
   createBatch: (batch) => {
     const id = Math.random().toString(36).substr(2, 9);
-    set((state) => ({
-      batches: [...state.batches, { ...batch, id }]
+    const joinTableEntries = batch.ingredientLotIds.map(lotId => ({
+      id: Math.random().toString(36).substr(2, 9),
+      [batch.type === 'Dough' ? 'doughBatchId' : 'fillingBatchId']: id,
+      receivedLotId: lotId
     }));
-    get().addAuditLog('CREATE_BATCH', `Created ${batch.type} batch ${batch.code}`, batch.createdByUserId);
+
+    set((state) => ({
+      batches: [...state.batches, { ...batch, id }],
+      [batch.type === 'Dough' ? 'doughBatchIngredients' : 'fillingBatchIngredients']: [
+        ...state[batch.type === 'Dough' ? 'doughBatchIngredients' : 'fillingBatchIngredients'],
+        ...joinTableEntries
+      ]
+    }));
+    get().addAuditLog('CREATE_BATCH', `Created ${batch.type} batch ${batch.code}`, batch.createdByUserId, 'Batch', id);
   },
 
   createProductionRun: (run) => {
     const id = Math.random().toString(36).substr(2, 9);
-    set((state) => ({
-      productionRuns: [...state.productionRuns, { ...run, id }]
+    const doughLinks = run.doughBatchIds.map(dbId => ({
+      id: Math.random().toString(36).substr(2, 9),
+      productionRunId: id,
+      doughBatchId: dbId
     }));
-    get().addAuditLog('CREATE_PRODUCTION', `Created run ${run.productBatchCode} for ${run.sku}`, run.createdByUserId);
+    const fillingLinks = run.fillingBatchIds.map(fbId => ({
+      id: Math.random().toString(36).substr(2, 9),
+      productionRunId: id,
+      fillingBatchId: fbId
+    }));
+
+    set((state) => ({
+      productionRuns: [...state.productionRuns, { ...run, id }],
+      productionRunDoughBatches: [...state.productionRunDoughBatches, ...doughLinks],
+      productionRunFillingBatches: [...state.productionRunFillingBatches, ...fillingLinks]
+    }));
+    get().addAuditLog('CREATE_PRODUCTION', `Created run ${run.productBatchCode} for ${run.sku}`, run.createdByUserId, 'ProductionRun', id);
   },
 
-  addAuditLog: (action, details, userId) => {
+  addAuditLog: (action, details, userId, entityType, entityId) => {
     set((state) => ({
       auditLog: [{
         id: Math.random().toString(36).substr(2, 9),
         timestamp: new Date().toISOString(),
         action,
         details,
-        userId
-      }, ...state.auditLog]
+        userId,
+        entityType,
+        entityId
+      } as any, ...state.auditLog]
     }));
   },
 
@@ -253,3 +314,4 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
     return lots[0];
   }
 }));
+

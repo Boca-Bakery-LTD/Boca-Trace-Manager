@@ -12,6 +12,8 @@ import ProductionRuns from "@/pages/ProductionRuns";
 import Traceability from "@/pages/Traceability";
 import RecallTest from "@/pages/RecallTest";
 
+import AuditLog from "@/pages/AuditLog";
+
 // Placeholder Pages
 const PlaceHolder = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-[50vh] text-muted-foreground">
@@ -33,9 +35,7 @@ function Router() {
       <Route path="/users">
         <PlaceHolder title="User Management" />
       </Route>
-      <Route path="/audit">
-        <PlaceHolder title="Audit Logs" />
-      </Route>
+      <Route path="/audit" component={AuditLog} />
       <Route component={NotFound} />
     </Switch>
   );
