@@ -22,6 +22,8 @@ const PlaceHolder = ({ title }: { title: string }) => (
   </div>
 );
 
+import Catalog from "@/pages/Catalog";
+
 function Router() {
   return (
     <Switch>
@@ -30,6 +32,7 @@ function Router() {
       <Route path="/dough" component={DoughBatches} />
       <Route path="/filling" component={FillingBatches} />
       <Route path="/production" component={ProductionRuns} />
+      <Route path="/catalog" component={Catalog} />
       <Route path="/trace" component={Traceability} />
       <Route path="/recall" component={RecallTest} />
       <Route path="/users">

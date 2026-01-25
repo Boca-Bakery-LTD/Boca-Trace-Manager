@@ -11,7 +11,8 @@ import {
   Settings,
   LogOut,
   Menu,
-  History
+  History,
+  BookOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { label: "Dough Batches", icon: ChefHat, href: "/dough" },
   { label: "Filling Batches", icon: UtensilsCrossed, href: "/filling" },
   { label: "Production Runs", icon: Factory, href: "/production" },
+  { label: "Product Catalog", icon: BookOpen, href: "/catalog" },
   { label: "Traceability", icon: Search, href: "/trace" },
   { label: "Recall Test", icon: Siren, href: "/recall" },
   { label: "Users", icon: Users, href: "/users" },

@@ -67,10 +67,20 @@ export interface Batch {
   ingredientLotIds: string[]; // Links to ReceivedLots used
 }
 
+export interface ProductCatalog {
+  id: string;
+  name: string;
+  sku: string;
+  hasDough: boolean;
+  hasFilling: boolean;
+  active: boolean;
+}
+
 // "Production Run" - Final Product creation
 export interface ProductionRun {
   id: string;
-  productName: string; // e.g. "White Loaf Sliced"
+  productId: string; // Link to Catalog
+  productName: string; // Keep for history/denormalization
   sku: string;
   productBatchCode: string; // ddmmyy
   runDate: string; // ISO
@@ -121,6 +131,7 @@ export interface ProductionRunFillingBatch {
 interface BakeryStore {
   users: User[];
   ingredientTypes: IngredientType[];
+  productCatalog: ProductCatalog[];
   receivedLots: ReceivedLot[];
   receivingReports: ReceivingReport[];
   dailyLog: DailyLogEntry[];
@@ -134,6 +145,9 @@ interface BakeryStore {
 
   // Actions
   addUser: (user: Omit<User, 'id'>) => void;
+  addProduct: (product: Omit<ProductCatalog, 'id'>) => void;
+  updateProduct: (id: string, product: Partial<ProductCatalog>) => void;
+  removeProduct: (id: string) => void;
   addReceivedLot: (lot: Omit<ReceivedLot, 'id'>) => void;
   createReceivingReport: (report: Omit<ReceivingReport, 'id' | 'lotIds'>, lots: Omit<ReceivedLot, 'id' | 'receivingReportId'>[]) => void;
   updateDailyLog: (date: string, ingredientTypeId: string, lotId: string) => void;
@@ -147,6 +161,13 @@ interface BakeryStore {
 }
 
 // --- Mock Data Initialization ---
+
+const INITIAL_CATALOG: ProductCatalog[] = [
+  { id: 'p1', name: 'Sourdough Loaf', sku: 'SD-800', hasDough: true, hasFilling: false, active: true },
+  { id: 'p2', name: 'Strawberry Jam Doughnut', sku: 'DN-JAM', hasDough: true, hasFilling: true, active: true },
+  { id: 'p3', name: 'Custard Slice', sku: 'CS-01', hasDough: false, hasFilling: true, active: true },
+  { id: 'p4', name: 'Baguette', sku: 'BAG-01', hasDough: true, hasFilling: false, active: true },
+];
 
 const INITIAL_USERS: User[] = [
   { id: 'u1', name: 'John Doe', role: 'Manager', active: true, pin: '1234' },
@@ -176,6 +197,7 @@ const INITIAL_LOTS: ReceivedLot[] = [
 export const useBakeryStore = create<BakeryStore>((set, get) => ({
   users: INITIAL_USERS,
   ingredientTypes: INITIAL_INGREDIENTS,
+  productCatalog: INITIAL_CATALOG,
   receivedLots: INITIAL_LOTS,
   receivingReports: [],
   dailyLog: [],
@@ -189,6 +211,20 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
 
   addUser: (user) => set((state) => ({ 
     users: [...state.users, { ...user, id: Math.random().toString(36).substr(2, 9) }] 
+  })),
+
+  addProduct: (product) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    set((state) => ({ productCatalog: [...state.productCatalog, { ...product, id }] }));
+    get().addAuditLog('ADD_CATALOG_ITEM', `Added ${product.name} to catalog`, 'system', 'ProductCatalog', id);
+  },
+
+  updateProduct: (id, product) => set((state) => ({
+    productCatalog: state.productCatalog.map(p => p.id === id ? { ...p, ...product } : p)
+  })),
+
+  removeProduct: (id) => set((state) => ({
+    productCatalog: state.productCatalog.filter(p => p.id !== id)
   })),
 
   addReceivedLot: (lot) => {
