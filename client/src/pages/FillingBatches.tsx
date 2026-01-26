@@ -19,7 +19,8 @@ export default function FillingBatches() {
     users, 
     recipes,
     createBatch,
-    getActiveLotForDate 
+    getActiveLotForDate,
+    getLotsForIngredient
   } = useBakeryStore();
   
   const { toast } = useToast();

@@ -21,7 +21,8 @@ export default function DoughBatches() {
     users, 
     recipes,
     createBatch,
-    getActiveLotForDate 
+    getActiveLotForDate,
+    getLotsForIngredient
   } = useBakeryStore();
   
   const { toast } = useToast();
