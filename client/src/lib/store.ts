@@ -7,6 +7,13 @@ export type Role = 'Admin' | 'Manager' | 'Staff';
 export type StorageCondition = 'Ambient' | 'Chilled' | 'Frozen';
 export type Unit = 'kg' | 'g' | 'L' | 'pcs' | 'bag' | 'box';
 
+export interface Recipe {
+  id: string;
+  name: string;
+  type: 'Dough' | 'Filling';
+  active: boolean;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -20,6 +27,7 @@ export interface IngredientType {
   name: string;
   defaultUnit: Unit;
   storage: StorageCondition;
+  active: boolean;
 }
 
 // "Receiving Report" - A document grouping multiple received lots
@@ -76,18 +84,17 @@ export interface ProductCatalog {
   active: boolean;
 }
 
-// "Production Run" - Final Product creation
+// "Production Run" - Final Product creation (Grouped record)
 export interface ProductionRun {
   id: string;
-  productId: string; // Link to Catalog
-  productName: string; // Keep for history/denormalization
-  sku: string;
   productBatchCode: string; // ddmmyy
   runDate: string; // ISO
-  createdByUserId: string;
-  quantity: number;
-  doughBatchIds: string[]; // Links to Dough Batches
-  fillingBatchIds: string[]; // Links to Filling Batches
+  createdByUserId: string; // Lead operator
+  operatorIds: string[]; // All operators present
+  quantities: Record<string, number>; // Map of productId -> quantity
+  doughBatchIds: string[]; // All dough batches used for the day
+  fillingBatchIds: string[]; // All filling batches used for the day
+  excludedBatches: string[]; // Batches explicitly disabled for this run
 }
 
 export interface AuditEvent {
@@ -131,6 +138,7 @@ export interface ProductionRunFillingBatch {
 interface BakeryStore {
   users: User[];
   ingredientTypes: IngredientType[];
+  recipes: Recipe[];
   productCatalog: ProductCatalog[];
   receivedLots: ReceivedLot[];
   receivingReports: ReceivingReport[];
@@ -145,6 +153,10 @@ interface BakeryStore {
 
   // Actions
   addUser: (user: Omit<User, 'id'>) => void;
+  addIngredientType: (ingredient: Omit<IngredientType, 'id'>) => void;
+  removeIngredientType: (id: string) => void;
+  addRecipe: (recipe: Omit<Recipe, 'id'>) => void;
+  removeRecipe: (id: string) => void;
   addProduct: (product: Omit<ProductCatalog, 'id'>) => void;
   updateProduct: (id: string, product: Partial<ProductCatalog>) => void;
   removeProduct: (id: string) => void;
@@ -162,11 +174,11 @@ interface BakeryStore {
 
 // --- Mock Data Initialization ---
 
-const INITIAL_CATALOG: ProductCatalog[] = [
-  { id: 'p1', name: 'Sourdough Loaf', sku: 'SD-800', hasDough: true, hasFilling: false, active: true },
-  { id: 'p2', name: 'Strawberry Jam Doughnut', sku: 'DN-JAM', hasDough: true, hasFilling: true, active: true },
-  { id: 'p3', name: 'Custard Slice', sku: 'CS-01', hasDough: false, hasFilling: true, active: true },
-  { id: 'p4', name: 'Baguette', sku: 'BAG-01', hasDough: true, hasFilling: false, active: true },
+const INITIAL_RECIPES: Recipe[] = [
+  { id: 'r1', name: 'Standard Sourdough', type: 'Dough', active: true },
+  { id: 'r2', name: 'Brioche Dough', type: 'Dough', active: true },
+  { id: 'r3', name: 'Vanilla Custard', type: 'Filling', active: true },
+  { id: 'r4', name: 'Strawberry Jam', type: 'Filling', active: true },
 ];
 
 const INITIAL_USERS: User[] = [
@@ -176,15 +188,22 @@ const INITIAL_USERS: User[] = [
 ];
 
 const INITIAL_INGREDIENTS: IngredientType[] = [
-  { id: 'ing1', name: 'Strong White Flour', defaultUnit: 'kg', storage: 'Ambient' },
-  { id: 'ing2', name: 'Wholemeal Flour', defaultUnit: 'kg', storage: 'Ambient' },
-  { id: 'ing3', name: 'Yeast (Fresh)', defaultUnit: 'g', storage: 'Chilled' },
-  { id: 'ing4', name: 'Salt', defaultUnit: 'kg', storage: 'Ambient' },
-  { id: 'ing5', name: 'Water', defaultUnit: 'L', storage: 'Ambient' },
-  { id: 'ing6', name: 'Butter', defaultUnit: 'kg', storage: 'Chilled' },
-  { id: 'ing7', name: 'Sugar', defaultUnit: 'kg', storage: 'Ambient' },
-  { id: 'ing8', name: 'Strawberry Jam', defaultUnit: 'kg', storage: 'Ambient' },
-  { id: 'ing9', name: 'Custard Mix', defaultUnit: 'kg', storage: 'Ambient' },
+  { id: 'ing1', name: 'Strong White Flour', defaultUnit: 'kg', storage: 'Ambient', active: true },
+  { id: 'ing2', name: 'Wholemeal Flour', defaultUnit: 'kg', storage: 'Ambient', active: true },
+  { id: 'ing3', name: 'Yeast (Fresh)', defaultUnit: 'g', storage: 'Chilled', active: true },
+  { id: 'ing4', name: 'Salt', defaultUnit: 'kg', storage: 'Ambient', active: true },
+  { id: 'ing5', name: 'Water', defaultUnit: 'L', storage: 'Ambient', active: true },
+  { id: 'ing6', name: 'Butter', defaultUnit: 'kg', storage: 'Chilled', active: true },
+  { id: 'ing7', name: 'Sugar', defaultUnit: 'kg', storage: 'Ambient', active: true },
+  { id: 'ing8', name: 'Strawberry Jam', defaultUnit: 'kg', storage: 'Ambient', active: true },
+  { id: 'ing9', name: 'Custard Mix', defaultUnit: 'kg', storage: 'Ambient', active: true },
+];
+
+const INITIAL_CATALOG: ProductCatalog[] = [
+  { id: 'p1', name: 'Sourdough Loaf', sku: 'SD-800', hasDough: true, hasFilling: false, active: true },
+  { id: 'p2', name: 'Strawberry Jam Doughnut', sku: 'DN-JAM', hasDough: true, hasFilling: true, active: true },
+  { id: 'p3', name: 'Custard Slice', sku: 'CS-01', hasDough: false, hasFilling: true, active: true },
+  { id: 'p4', name: 'Baguette', sku: 'BAG-01', hasDough: true, hasFilling: false, active: true },
 ];
 
 // Some seed lots
@@ -197,6 +216,7 @@ const INITIAL_LOTS: ReceivedLot[] = [
 export const useBakeryStore = create<BakeryStore>((set, get) => ({
   users: INITIAL_USERS,
   ingredientTypes: INITIAL_INGREDIENTS,
+  recipes: INITIAL_RECIPES,
   productCatalog: INITIAL_CATALOG,
   receivedLots: INITIAL_LOTS,
   receivingReports: [],
@@ -211,6 +231,22 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
 
   addUser: (user) => set((state) => ({ 
     users: [...state.users, { ...user, id: Math.random().toString(36).substr(2, 9) }] 
+  })),
+
+  addIngredientType: (ing) => set((state) => ({
+    ingredientTypes: [...state.ingredientTypes, { ...ing, id: Math.random().toString(36).substr(2, 9), active: true }]
+  })),
+
+  removeIngredientType: (id) => set((state) => ({
+    ingredientTypes: state.ingredientTypes.filter(i => i.id !== id)
+  })),
+
+  addRecipe: (recipe) => set((state) => ({
+    recipes: [...state.recipes, { ...recipe, id: Math.random().toString(36).substr(2, 9), active: true }]
+  })),
+
+  removeRecipe: (id) => set((state) => ({
+    recipes: state.recipes.filter(r => r.id !== id)
   })),
 
   addProduct: (product) => {
@@ -293,28 +329,25 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
         ...joinTableEntries
       ]
     }));
+
+    // Update Daily Log with new lot IDs (This satisfies "archive/replace old batch" requirement)
+    const today = format(new Date(), 'yyyy-MM-dd');
+    batch.ingredientLotIds.forEach(lotId => {
+      const lot = get().receivedLots.find(l => l.id === lotId);
+      if (lot) {
+        get().updateDailyLog(today, lot.ingredientTypeId, lot.id);
+      }
+    });
+
     get().addAuditLog('CREATE_BATCH', `Created ${batch.type} batch ${batch.code}`, batch.createdByUserId, 'Batch', id);
   },
 
   createProductionRun: (run) => {
     const id = Math.random().toString(36).substr(2, 9);
-    const doughLinks = run.doughBatchIds.map(dbId => ({
-      id: Math.random().toString(36).substr(2, 9),
-      productionRunId: id,
-      doughBatchId: dbId
-    }));
-    const fillingLinks = run.fillingBatchIds.map(fbId => ({
-      id: Math.random().toString(36).substr(2, 9),
-      productionRunId: id,
-      fillingBatchId: fbId
-    }));
-
     set((state) => ({
       productionRuns: [...state.productionRuns, { ...run, id }],
-      productionRunDoughBatches: [...state.productionRunDoughBatches, ...doughLinks],
-      productionRunFillingBatches: [...state.productionRunFillingBatches, ...fillingLinks]
     }));
-    get().addAuditLog('CREATE_PRODUCTION', `Created run ${run.productBatchCode} for ${run.sku}`, run.createdByUserId, 'ProductionRun', id);
+    get().addAuditLog('CREATE_PRODUCTION_GROUP', `Created production group ${run.productBatchCode}`, run.createdByUserId, 'ProductionRun', id);
   },
 
   addAuditLog: (action, details, userId, entityType, entityId) => {
@@ -342,7 +375,6 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
     if (entry) return state.receivedLots.find(l => l.id === entry.activeReceivedLotId);
 
     // 2. If no entry, find the "latest" lot received before or on this date (Fallback logic)
-    // For simplicity in this mock, we'll just return the most recently received lot
     const lots = state.receivedLots
       .filter(l => l.ingredientTypeId === typeId)
       .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useBakeryStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ export default function DoughBatches() {
     dailyLog, 
     receivedLots,
     users, 
+    recipes,
     createBatch,
     getActiveLotForDate 
   } = useBakeryStore();
@@ -26,11 +27,15 @@ export default function DoughBatches() {
   const { toast } = useToast();
 
   const [isCreating, setIsCreating] = useState(false);
+  
+  // Date-based batch code: DOUGH-ddmmyy
+  const todayDDMMYY = format(new Date(), "ddMMyy");
+  
   const [formData, setFormData] = useState({
     name: "",
-    code: `DOUGH-${Math.floor(Math.random() * 1000)}`,
+    code: `DOUGH-${todayDDMMYY}`,
     createdByUserId: "",
-    selectedIngredients: [] as string[] // list of ingredientTypeIds
+    selectedIngredients: [] as string[]
   });
 
   const today = format(new Date(), "yyyy-MM-dd");
@@ -41,14 +46,13 @@ export default function DoughBatches() {
       return;
     }
 
-    // Resolve the actual Lot IDs based on the Daily Log for today
     const ingredientLotIds = formData.selectedIngredients.map(typeId => {
       const activeLot = getActiveLotForDate(today, typeId);
       return activeLot?.id;
     }).filter(Boolean) as string[];
 
     if (ingredientLotIds.length === 0) {
-      toast({ title: "Error", description: "No active lots found for selected ingredients. Check Daily Log.", variant: "destructive" });
+      toast({ title: "Error", description: "No active lots found. Check Daily Log.", variant: "destructive" });
       return;
     }
 
@@ -65,7 +69,7 @@ export default function DoughBatches() {
     setIsCreating(false);
     setFormData({
       name: "",
-      code: `DOUGH-${Math.floor(Math.random() * 1000)}`,
+      code: `DOUGH-${todayDDMMYY}`,
       createdByUserId: "",
       selectedIngredients: []
     });
@@ -84,13 +88,14 @@ export default function DoughBatches() {
   };
 
   const doughBatches = batches.filter(b => b.type === 'Dough').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const doughRecipes = recipes.filter(r => r.type === 'Dough' && r.active);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto pb-20">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-6">
         <div>
           <h2 className="text-3xl font-display font-bold text-primary tracking-tight">Dough Batches</h2>
-          <p className="text-muted-foreground">Create and track dough batches using today's ingredients.</p>
+          <p className="text-muted-foreground">Create dough batches using today's ingredients.</p>
         </div>
         <Button onClick={() => setIsCreating(true)} size="lg" className="gap-2 font-bold" disabled={isCreating}>
           <Plus className="w-5 h-5" />
@@ -109,28 +114,32 @@ export default function DoughBatches() {
           <CardContent className="pt-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                 <Label>Recipe / Batch Name</Label>
-                 <Input 
-                   placeholder="e.g. White Sourdough Mix" 
-                   value={formData.name}
-                   onChange={e => setFormData({ ...formData, name: e.target.value })}
-                   className="font-medium text-lg"
-                 />
+                 <Label>Select Recipe</Label>
+                 <Select value={formData.name} onValueChange={v => setFormData({...formData, name: v})}>
+                    <SelectTrigger className="text-lg font-medium h-12">
+                      <SelectValue placeholder="Select recipe..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {doughRecipes.map(r => (
+                        <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                 </Select>
               </div>
               <div className="space-y-2">
                  <Label>Batch Code (Auto)</Label>
                  <Input 
                    value={formData.code} 
-                   readOnly 
-                   className="font-mono bg-muted text-muted-foreground"
+                   onChange={e => setFormData({...formData, code: e.target.value})}
+                   className="font-mono bg-muted"
                  />
               </div>
             </div>
 
             <div className="space-y-3">
-              <Label className="text-base">Select Ingredients Used (from Daily Log)</Label>
+              <Label className="text-base font-bold">Today's Active Ingredients</Label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {ingredientTypes.map(type => {
+                {ingredientTypes.filter(i => i.active).map(type => {
                   const activeLot = getActiveLotForDate(today, type.id);
                   const isSelected = formData.selectedIngredients.includes(type.id);
                   
@@ -150,7 +159,7 @@ export default function DoughBatches() {
                         {activeLot ? (
                            <p className="text-xs font-mono text-muted-foreground mt-1">Lot: {activeLot.batchCode}</p>
                         ) : (
-                           <p className="text-xs text-rose-500 mt-1">No active lot today</p>
+                           <p className="text-xs text-rose-500 mt-1 uppercase font-bold">No active lot</p>
                         )}
                       </div>
                     </div>
@@ -190,7 +199,7 @@ export default function DoughBatches() {
         <CardHeader>
            <CardTitle className="flex items-center gap-2">
              <History className="w-5 h-5 text-muted-foreground" />
-             Recent Batches
+             Recent Dough Batches
            </CardTitle>
         </CardHeader>
         <CardContent>
@@ -202,32 +211,20 @@ export default function DoughBatches() {
                 <TableHead>Recipe</TableHead>
                 <TableHead>Ingredients</TableHead>
                 <TableHead>Operator</TableHead>
-                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-               {doughBatches.length === 0 ? (
-                 <TableRow>
-                   <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No dough batches recorded yet.</TableCell>
+               {doughBatches.map(batch => (
+                 <TableRow key={batch.id}>
+                   <TableCell className="font-mono text-xs">{format(new Date(batch.createdAt), "HH:mm")}</TableCell>
+                   <TableCell className="font-mono font-bold text-primary">{batch.code}</TableCell>
+                   <TableCell className="font-medium">{batch.name}</TableCell>
+                   <TableCell className="text-xs text-muted-foreground">
+                     {batch.ingredientLotIds.length} lots
+                   </TableCell>
+                   <TableCell>{users.find(u => u.id === batch.createdByUserId)?.name}</TableCell>
                  </TableRow>
-               ) : (
-                 doughBatches.map(batch => (
-                   <TableRow key={batch.id}>
-                     <TableCell className="font-mono text-xs">{format(new Date(batch.createdAt), "HH:mm")}</TableCell>
-                     <TableCell className="font-mono font-bold text-primary">{batch.code}</TableCell>
-                     <TableCell className="font-medium">{batch.name}</TableCell>
-                     <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                       {batch.ingredientLotIds.length} lots linked
-                     </TableCell>
-                     <TableCell>{users.find(u => u.id === batch.createdByUserId)?.name}</TableCell>
-                     <TableCell>
-                       <Button variant="ghost" size="sm">
-                         <ArrowRight className="w-4 h-4" />
-                       </Button>
-                     </TableCell>
-                   </TableRow>
-                 ))
-               )}
+               ))}
             </TableBody>
           </Table>
         </CardContent>

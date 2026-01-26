@@ -6,16 +6,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { UtensilsCrossed, Plus, Save, History, ArrowRight } from "lucide-react";
+import { UtensilsCrossed, Plus, Save, History } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function FillingBatches() {
   const { 
     batches, 
     ingredientTypes, 
     users, 
+    recipes,
     createBatch,
     getActiveLotForDate 
   } = useBakeryStore();
@@ -23,9 +25,11 @@ export default function FillingBatches() {
   const { toast } = useToast();
 
   const [isCreating, setIsCreating] = useState(false);
+  const todayDDMMYY = format(new Date(), "ddMMyy");
+  
   const [formData, setFormData] = useState({
     name: "",
-    code: `FILL-${Math.floor(Math.random() * 1000)}`,
+    code: `FILL-${todayDDMMYY}`,
     createdByUserId: "",
     selectedIngredients: [] as string[]
   });
@@ -44,7 +48,7 @@ export default function FillingBatches() {
     }).filter(Boolean) as string[];
 
     if (ingredientLotIds.length === 0) {
-      toast({ title: "Error", description: "No active lots found for selected ingredients.", variant: "destructive" });
+      toast({ title: "Error", description: "No active lots found.", variant: "destructive" });
       return;
     }
 
@@ -61,7 +65,7 @@ export default function FillingBatches() {
     setIsCreating(false);
     setFormData({
       name: "",
-      code: `FILL-${Math.floor(Math.random() * 1000)}`,
+      code: `FILL-${todayDDMMYY}`,
       createdByUserId: "",
       selectedIngredients: []
     });
@@ -80,9 +84,10 @@ export default function FillingBatches() {
   };
 
   const fillingBatches = batches.filter(b => b.type === 'Filling').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const fillingRecipes = recipes.filter(r => r.type === 'Filling' && r.active);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto pb-20">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-6">
         <div>
           <h2 className="text-3xl font-display font-bold text-primary tracking-tight">Filling Batches</h2>
@@ -105,28 +110,32 @@ export default function FillingBatches() {
           <CardContent className="pt-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                 <Label>Recipe Name</Label>
-                 <Input 
-                   placeholder="e.g. Vanilla Custard" 
-                   value={formData.name}
-                   onChange={e => setFormData({ ...formData, name: e.target.value })}
-                   className="font-medium text-lg"
-                 />
+                 <Label>Select Filling Recipe</Label>
+                 <Select value={formData.name} onValueChange={v => setFormData({...formData, name: v})}>
+                    <SelectTrigger className="text-lg font-medium h-12">
+                      <SelectValue placeholder="Select recipe..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {fillingRecipes.map(r => (
+                        <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                 </Select>
               </div>
               <div className="space-y-2">
                  <Label>Batch Code</Label>
                  <Input 
                    value={formData.code} 
-                   readOnly 
-                   className="font-mono bg-muted text-muted-foreground"
+                   onChange={e => setFormData({...formData, code: e.target.value})}
+                   className="font-mono bg-muted"
                  />
               </div>
             </div>
 
             <div className="space-y-3">
-              <Label className="text-base">Select Ingredients (from Daily Log)</Label>
+              <Label className="text-base font-bold">Select Active Ingredients</Label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {ingredientTypes.map(type => {
+                {ingredientTypes.filter(i => i.active).map(type => {
                   const activeLot = getActiveLotForDate(today, type.id);
                   const isSelected = formData.selectedIngredients.includes(type.id);
                   
@@ -146,7 +155,7 @@ export default function FillingBatches() {
                         {activeLot ? (
                            <p className="text-xs font-mono text-muted-foreground mt-1">Lot: {activeLot.batchCode}</p>
                         ) : (
-                           <p className="text-xs text-rose-500 mt-1">No active lot</p>
+                           <p className="text-xs text-rose-500 mt-1 uppercase font-bold">No active lot</p>
                         )}
                       </div>
                     </div>
@@ -196,34 +205,18 @@ export default function FillingBatches() {
                 <TableHead>Time</TableHead>
                 <TableHead>Batch Code</TableHead>
                 <TableHead>Recipe</TableHead>
-                <TableHead>Ingredients</TableHead>
                 <TableHead>Operator</TableHead>
-                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-               {fillingBatches.length === 0 ? (
-                 <TableRow>
-                   <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No filling batches recorded yet.</TableCell>
+               {fillingBatches.map(batch => (
+                 <TableRow key={batch.id}>
+                   <TableCell className="font-mono text-xs">{format(new Date(batch.createdAt), "HH:mm")}</TableCell>
+                   <TableCell className="font-mono font-bold text-amber-700">{batch.code}</TableCell>
+                   <TableCell className="font-medium">{batch.name}</TableCell>
+                   <TableCell>{users.find(u => u.id === batch.createdByUserId)?.name}</TableCell>
                  </TableRow>
-               ) : (
-                 fillingBatches.map(batch => (
-                   <TableRow key={batch.id}>
-                     <TableCell className="font-mono text-xs">{format(new Date(batch.createdAt), "HH:mm")}</TableCell>
-                     <TableCell className="font-mono font-bold text-amber-700">{batch.code}</TableCell>
-                     <TableCell className="font-medium">{batch.name}</TableCell>
-                     <TableCell className="text-xs text-muted-foreground">
-                       {batch.ingredientLotIds.length} lots linked
-                     </TableCell>
-                     <TableCell>{users.find(u => u.id === batch.createdByUserId)?.name}</TableCell>
-                     <TableCell>
-                       <Button variant="ghost" size="sm">
-                         <ArrowRight className="w-4 h-4" />
-                       </Button>
-                     </TableCell>
-                   </TableRow>
-                 ))
-               )}
+               ))}
             </TableBody>
           </Table>
         </CardContent>

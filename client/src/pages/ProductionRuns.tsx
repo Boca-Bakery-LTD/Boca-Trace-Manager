@@ -1,15 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useBakeryStore, ProductionRun } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Factory, Save, History } from "lucide-react";
-import { format } from "date-fns";
+import { Factory, Save, History, Users, CheckCircle2, Circle } from "lucide-react";
+import { format, isSameDay } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 export default function ProductionRuns() {
   const { 
@@ -21,216 +21,227 @@ export default function ProductionRuns() {
   } = useBakeryStore();
   
   const { toast } = useToast();
+  const today = new Date();
+  const todayDateStr = format(today, "yyyy-MM-dd");
+  const todayDDMMYY = format(today, "ddMMyy");
+
+  const staff = users.filter(u => u.role !== 'Admin');
   
-  const todayDDMMYY = format(new Date(), "ddMMyy");
   const [productBatchCode, setProductBatchCode] = useState(todayDDMMYY);
-  const [createdByUserId, setCreatedByUserId] = useState("");
+  const [leadOperatorId, setLeadOperatorId] = useState("");
+  const [presentOperators, setPresentOperators] = useState<string[]>(staff.map(u => u.id));
   
-  // Track quantities and batch selections per catalog product
-  const [entries, setEntries] = useState<Record<string, {
-    quantity: string;
-    selectedDoughIds: string[];
-    selectedFillingIds: string[];
-  }>>({});
+  // Daily Batches
+  const todayDoughBatches = batches.filter(b => b.type === 'Dough' && isSameDay(new Date(b.createdAt), today));
+  const todayFillingBatches = batches.filter(b => b.type === 'Filling' && isSameDay(new Date(b.createdAt), today));
+  
+  // Persistent filling selection logic: Use today's if exists, else most recent ever
+  const recentFillings = batches.filter(b => b.type === 'Filling').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  const updateEntry = (productId: string, field: string, value: any) => {
-    setEntries(prev => ({
-      ...prev,
-      [productId]: {
-        ...(prev[productId] || { quantity: "", selectedDoughIds: [], selectedFillingIds: [] }),
-        [field]: value
-      }
-    }));
-  };
+  const [excludedBatches, setExcludedBatches] = useState<string[]>([]);
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
 
-  const handleFinishRun = (productId: string) => {
-    const product = productCatalog.find(p => p.id === productId);
-    const entry = entries[productId];
+  const handleFinishGroup = () => {
+    if (!leadOperatorId) {
+      toast({ title: "Error", description: "Select a Lead Operator", variant: "destructive" });
+      return;
+    }
+
+    const finalQuantities: Record<string, number> = {};
+    let hasEntries = false;
     
-    if (!product || !entry || !entry.quantity || !createdByUserId) {
-      toast({ title: "Error", description: "Quantity and Operator required", variant: "destructive" });
-      return;
-    }
-
-    if (product.hasDough && entry.selectedDoughIds.length === 0) {
-      toast({ title: "Error", description: "Please select at least one dough batch", variant: "destructive" });
-      return;
-    }
-
-    if (product.hasFilling && entry.selectedFillingIds.length === 0) {
-      toast({ title: "Error", description: "Please select at least one filling batch", variant: "destructive" });
-      return;
-    }
-
-    createProductionRun({
-      productId: product.id,
-      productName: product.name,
-      sku: product.sku,
-      productBatchCode,
-      runDate: new Date().toISOString(),
-      createdByUserId,
-      quantity: Number(entry.quantity),
-      doughBatchIds: entry.selectedDoughIds,
-      fillingBatchIds: entry.selectedFillingIds
+    productCatalog.forEach(p => {
+      const q = Number(quantities[p.id]);
+      if (q > 0) {
+        finalQuantities[p.id] = q;
+        hasEntries = true;
+      }
     });
 
-    toast({ title: "Success", description: `${product.name} Production Logged` });
-    
-    // Reset entry
-    updateEntry(productId, 'quantity', "");
+    if (!hasEntries) {
+      toast({ title: "Error", description: "No quantities recorded", variant: "destructive" });
+      return;
+    }
+
+    // Default batches used (all today's dough + current fillings)
+    const dIds = todayDoughBatches.map(b => b.id);
+    const fIds = (todayFillingBatches.length > 0 ? todayFillingBatches : recentFillings.slice(0, 1)).map(b => b.id);
+
+    createProductionRun({
+      productBatchCode,
+      runDate: new Date().toISOString(),
+      createdByUserId: leadOperatorId,
+      operatorIds: presentOperators,
+      quantities: finalQuantities,
+      doughBatchIds: dIds,
+      fillingBatchIds: fIds,
+      excludedBatches
+    });
+
+    toast({ title: "Daily Production Group Saved" });
+    setQuantities({});
   };
 
-  const recentDoughBatches = batches.filter(b => b.type === 'Dough').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
-  const recentFillingBatches = batches.filter(b => b.type === 'Filling').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
+  const toggleOperator = (id: string) => {
+    setPresentOperators(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
   const runs = productionRuns.sort((a,b) => new Date(b.runDate).getTime() - new Date(a.runDate).getTime());
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-20">
       <div className="flex justify-between items-center border-b pb-6">
         <div>
-          <h2 className="text-3xl font-display font-bold text-primary tracking-tight">Daily Production Log</h2>
-          <p className="text-muted-foreground">Record quantities of finished products for today's run.</p>
+          <h2 className="text-3xl font-display font-bold text-primary tracking-tight">Daily Production Group</h2>
+          <p className="text-muted-foreground">Log all finished products for today's batch: <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 rounded">{productBatchCode}</span></p>
         </div>
-        <div className="flex gap-4">
-           <div className="space-y-1">
-             <Label className="text-[10px] uppercase font-bold text-muted-foreground">Batch Code</Label>
-             <Input value={productBatchCode} onChange={e => setProductBatchCode(e.target.value)} className="font-mono bg-emerald-50 w-32 h-10" />
-           </div>
-           <div className="space-y-1">
-             <Label className="text-[10px] uppercase font-bold text-muted-foreground">Operator</Label>
-             <div className="flex gap-1">
-                {users.filter(u => u.role !== 'Admin').map(u => (
-                  <Button 
-                    key={u.id} 
-                    variant={createdByUserId === u.id ? "default" : "outline"} 
-                    size="sm"
-                    onClick={() => setCreatedByUserId(u.id)}
-                    className={cn(createdByUserId === u.id && "bg-emerald-600")}
-                  >
-                    {u.name.split(' ')[0]}
-                  </Button>
-                ))}
-             </div>
-           </div>
+        <div className="flex flex-col items-end gap-2">
+           <Label className="text-[10px] font-bold uppercase text-muted-foreground">Select Batch Code</Label>
+           <Input value={productBatchCode} onChange={e => setProductBatchCode(e.target.value)} className="w-32 h-10 font-mono text-center bg-emerald-50 font-bold border-emerald-200" />
         </div>
       </div>
 
-      <div className="space-y-4">
-        {productCatalog.map(product => {
-          const entry = entries[product.id] || { quantity: "", selectedDoughIds: [], selectedFillingIds: [] };
-          return (
-            <Card key={product.id} className="overflow-hidden border-l-4 border-l-primary/20 hover:border-l-primary transition-all">
-              <CardContent className="p-4 flex flex-col md:flex-row gap-6 items-start">
-                <div className="md:w-1/4">
-                  <h3 className="font-bold text-lg">{product.name}</h3>
-                  <p className="text-xs text-muted-foreground font-mono">{product.sku}</p>
-                  <div className="mt-2 flex gap-1">
-                    {product.hasDough && <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold">DOUGH</span>}
-                    {product.hasFilling && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold">FILLING</span>}
-                  </div>
-                </div>
-
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {product.hasDough && (
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-bold text-muted-foreground">SELECT DOUGH BATCH</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {recentDoughBatches.map(b => (
-                          <Button 
-                            key={b.id} 
-                            variant={entry.selectedDoughIds.includes(b.id) ? "default" : "outline"}
-                            size="sm"
-                            className="text-[10px] h-7 px-2 font-mono"
-                            onClick={() => {
-                              const ids = entry.selectedDoughIds.includes(b.id) ? [] : [b.id];
-                              updateEntry(product.id, 'selectedDoughIds', ids);
-                            }}
-                          >
-                            {b.code}
-                          </Button>
-                        ))}
-                      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Left: Operators & Global Config */}
+        <div className="space-y-6">
+          <Card className="border-emerald-100">
+            <CardHeader className="py-4">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Staff Presence
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+               {staff.map(u => (
+                 <div key={u.id} className="flex items-center justify-between p-2 rounded border hover:bg-muted/50 cursor-pointer" onClick={() => toggleOperator(u.id)}>
+                    <div className="flex items-center gap-2">
+                      {presentOperators.includes(u.id) ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Circle className="w-4 h-4 text-muted-foreground" />}
+                      <span className={cn("text-sm font-medium", !presentOperators.includes(u.id) && "text-muted-foreground line-through")}>{u.name}</span>
                     </div>
-                  )}
-                  {product.hasFilling && (
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-bold text-muted-foreground">SELECT FILLING BATCH</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {recentFillingBatches.map(b => (
-                          <Button 
-                            key={b.id} 
-                            variant={entry.selectedFillingIds.includes(b.id) ? "default" : "outline"}
-                            size="sm"
-                            className={cn("text-[10px] h-7 px-2 font-mono", entry.selectedFillingIds.includes(b.id) && "bg-amber-600 hover:bg-amber-700")}
-                            onClick={() => {
-                              const ids = entry.selectedFillingIds.includes(b.id) ? [] : [b.id];
-                              updateEntry(product.id, 'selectedFillingIds', ids);
-                            }}
-                          >
-                            {b.code}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    {presentOperators.includes(u.id) && (
+                      <Button 
+                        variant={leadOperatorId === u.id ? "default" : "ghost"}
+                        size="sm"
+                        className="h-6 text-[10px] uppercase font-bold"
+                        onClick={(e) => { e.stopPropagation(); setLeadOperatorId(u.id); }}
+                      >
+                        {leadOperatorId === u.id ? "Lead" : "Set Lead"}
+                      </Button>
+                    )}
+                 </div>
+               ))}
+            </CardContent>
+          </Card>
 
-                <div className="md:w-1/5 flex gap-2 items-end">
-                  <div className="space-y-2 flex-1">
-                    <Label className="text-[10px] font-bold text-muted-foreground">QUANTITY</Label>
-                    <Input 
-                      type="number" 
-                      placeholder="0" 
-                      value={entry.quantity} 
-                      onChange={e => updateEntry(product.id, 'quantity', e.target.value)}
-                      className="h-10 text-center text-lg font-bold"
-                    />
-                  </div>
-                  <Button 
-                    onClick={() => handleFinishRun(product.id)}
-                    className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white"
-                  >
-                    <Save className="w-4 h-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <History className="w-4 h-4 text-muted-foreground" />
-            Recent Production History
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Batch</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead>Qty</TableHead>
-                <TableHead>Operator</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {runs.slice(0, 10).map(run => (
-                <TableRow key={run.id}>
-                  <TableCell className="font-mono text-[10px] font-bold text-emerald-700">{run.productBatchCode}</TableCell>
-                  <TableCell className="text-sm font-medium">{run.productName}</TableCell>
-                  <TableCell className="text-sm">{run.quantity}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {users.find(u => u.id === run.createdByUserId)?.name}
-                  </TableCell>
-                </TableRow>
+          <Card className="border-blue-100">
+            <CardHeader className="py-4">
+              <CardTitle className="text-sm">Today's Batches (Auto-Selected)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-[10px] text-muted-foreground font-bold uppercase mb-2">Dough</p>
+              {todayDoughBatches.map(b => (
+                 <div key={b.id} className="flex items-center justify-between text-xs p-2 bg-blue-50/50 rounded border border-blue-100">
+                   <span className="font-mono font-bold">{b.code}</span>
+                   <Button variant="ghost" size="sm" className="h-6 px-2 text-rose-500 hover:text-rose-700" onClick={() => setExcludedBatches([...excludedBatches, b.id])}>Disable</Button>
+                 </div>
               ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              <p className="text-[10px] text-muted-foreground font-bold uppercase mt-4 mb-2">Filling</p>
+              {(todayFillingBatches.length > 0 ? todayFillingBatches : recentFillings.slice(0, 1)).map(b => (
+                <div key={b.id} className="flex items-center justify-between text-xs p-2 bg-amber-50/50 rounded border border-amber-100">
+                  <span className="font-mono font-bold">{b.code}</span>
+                  <Badge variant="outline" className="text-[8px] bg-white">{isSameDay(new Date(b.createdAt), today) ? 'Today' : 'Stored'}</Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Center: Daily Checklist */}
+        <div className="lg:col-span-3 space-y-4">
+           <Card className="border-primary/20 shadow-sm">
+             <CardHeader className="bg-muted/30 py-4 flex flex-row justify-between items-center">
+                <CardTitle className="text-lg">Quantities Produced Today</CardTitle>
+                <Button onClick={handleFinishGroup} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2">
+                   <Save className="w-4 h-4" /> Save Daily Group
+                </Button>
+             </CardHeader>
+             <CardContent className="p-0">
+               <Table>
+                 <TableHeader>
+                   <TableRow>
+                     <TableHead className="w-[300px]">Product Name</TableHead>
+                     <TableHead>SKU</TableHead>
+                     <TableHead>Required Batches</TableHead>
+                     <TableHead className="text-right w-[150px]">Quantity</TableHead>
+                   </TableRow>
+                 </TableHeader>
+                 <TableBody>
+                   {productCatalog.filter(p => p.active).map(product => (
+                     <TableRow key={product.id} className="group hover:bg-muted/10">
+                       <TableCell className="font-bold">{product.name}</TableCell>
+                       <TableCell className="font-mono text-xs text-muted-foreground">{product.sku}</TableCell>
+                       <TableCell>
+                          <div className="flex gap-1">
+                            {product.hasDough && <Badge className="bg-blue-100 text-blue-700 border-none text-[8px]">DOUGH</Badge>}
+                            {product.hasFilling && <Badge className="bg-amber-100 text-amber-700 border-none text-[8px]">FILLING</Badge>}
+                          </div>
+                       </TableCell>
+                       <TableCell className="text-right">
+                          <Input 
+                            type="number" 
+                            placeholder="0" 
+                            className="text-right font-bold text-lg h-10 bg-white group-hover:bg-primary/5 transition-colors"
+                            value={quantities[product.id] || ""}
+                            onChange={e => setQuantities({...quantities, [product.id]: e.target.value})}
+                          />
+                       </TableCell>
+                     </TableRow>
+                   ))}
+                 </TableBody>
+               </Table>
+             </CardContent>
+           </Card>
+
+           <Card>
+             <CardHeader className="py-4">
+               <CardTitle className="text-sm font-bold flex items-center gap-2">
+                 <History className="w-4 h-4 text-muted-foreground" />
+                 Recent History
+               </CardTitle>
+             </CardHeader>
+             <CardContent>
+                <Table>
+                   <TableHeader>
+                      <TableRow>
+                        <TableHead>Batch</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Items</TableHead>
+                        <TableHead>Lead</TableHead>
+                        <TableHead className="text-right">Total Units</TableHead>
+                      </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                      {runs.slice(0, 5).map(run => {
+                        const total = Object.values(run.quantities).reduce((a,b) => a + b, 0);
+                        const operator = users.find(u => u.id === run.createdByUserId);
+                        return (
+                          <TableRow key={run.id}>
+                            <TableCell className="font-mono font-bold text-emerald-700">{run.productBatchCode}</TableCell>
+                            <TableCell className="text-xs">{format(new Date(run.runDate), "dd/MM/yy")}</TableCell>
+                            <TableCell className="text-xs">{Object.keys(run.quantities).length} Products</TableCell>
+                            <TableCell className="text-xs font-medium">{operator?.name}</TableCell>
+                            <TableCell className="text-right font-bold">{total}</TableCell>
+                          </TableRow>
+                        )
+                      })}
+                   </TableBody>
+                </Table>
+             </CardContent>
+           </Card>
+        </div>
+      </div>
     </div>
   );
 }
