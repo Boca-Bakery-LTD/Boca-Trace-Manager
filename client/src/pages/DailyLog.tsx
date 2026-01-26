@@ -43,6 +43,14 @@ export default function DailyLog() {
 
   const activeIngs = ingredientTypes.filter(i => i.active);
 
+  const getArchivedLot = (typeId: string, activeLotId?: string) => {
+    // Return the most recent lot that is NOT the active one
+    const lots = getLotsForIngredient(typeId)
+      .filter(l => l.id !== activeLotId)
+      .sort((a,b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+    return lots[0]; // Return only 1 previous archived batch code
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-20">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-6">
@@ -137,6 +145,20 @@ export default function DailyLog() {
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {/* Archived Batch Code Section */}
+                  {(() => {
+                    const archived = getArchivedLot(type.id, activeLot?.id);
+                    if (!archived) return null;
+                    return (
+                      <div className="mt-2 p-2 bg-muted/30 rounded border border-dashed flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase">Previous (Archived)</span>
+                        <Badge variant="secondary" className="font-mono text-[9px] opacity-60 grayscale cursor-not-allowed">
+                          {archived.batchCode}
+                        </Badge>
+                      </div>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>

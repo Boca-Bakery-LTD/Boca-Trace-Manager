@@ -40,6 +40,7 @@ export default function ProductionRuns() {
 
   const [excludedBatches, setExcludedBatches] = useState<string[]>([]);
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
   const handleFinishGroup = () => {
     if (!leadOperatorId) {
@@ -223,17 +224,60 @@ export default function ProductionRuns() {
                       </TableRow>
                    </TableHeader>
                    <TableBody>
-                      {runs.slice(0, 5).map(run => {
+                      {runs.slice(0, 10).map(run => {
                         const total = Object.values(run.quantities).reduce((a,b) => a + b, 0);
                         const operator = users.find(u => u.id === run.createdByUserId);
+                        const isExpanded = expandedRunId === run.id;
+
                         return (
-                          <TableRow key={run.id}>
-                            <TableCell className="font-mono font-bold text-emerald-700">{run.productBatchCode}</TableCell>
-                            <TableCell className="text-xs">{format(new Date(run.runDate), "dd/MM/yy")}</TableCell>
-                            <TableCell className="text-xs">{Object.keys(run.quantities).length} Products</TableCell>
-                            <TableCell className="text-xs font-medium">{operator?.name}</TableCell>
-                            <TableCell className="text-right font-bold">{total}</TableCell>
-                          </TableRow>
+                          <>
+                            <TableRow 
+                              key={run.id} 
+                              className="cursor-pointer hover:bg-muted/30"
+                              onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
+                            >
+                              <TableCell className="font-mono font-bold text-emerald-700">
+                                <div className="flex items-center gap-2">
+                                  {run.productBatchCode}
+                                  {isExpanded ? <Badge variant="secondary" className="text-[8px]">Collapse</Badge> : <Badge variant="outline" className="text-[8px]">Expand</Badge>}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs">{format(new Date(run.runDate), "dd/MM/yy")}</TableCell>
+                              <TableCell className="text-xs">{Object.keys(run.quantities).length} Products</TableCell>
+                              <TableCell className="text-xs font-medium">{operator?.name}</TableCell>
+                              <TableCell className="text-right font-bold">{total}</TableCell>
+                            </TableRow>
+                            {isExpanded && (
+                              <TableRow className="bg-muted/20">
+                                <TableCell colSpan={5} className="p-4">
+                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    {Object.entries(run.quantities).map(([productId, qty]) => {
+                                      const product = productCatalog.find(p => p.id === productId);
+                                      return (
+                                        <div key={productId} className="flex justify-between items-center p-2 border rounded bg-white">
+                                          <span className="text-xs font-medium">{product?.name}</span>
+                                          <span className="text-xs font-bold text-emerald-700">{qty}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="mt-4 flex gap-4 text-[10px] text-muted-foreground uppercase font-bold">
+                                    <div>Batches Used: </div>
+                                    <div className="flex gap-2">
+                                      {run.doughBatchIds.map(id => {
+                                        const b = batches.find(x => x.id === id);
+                                        return <Badge key={id} variant="secondary" className="text-[8px]">{b?.code}</Badge>;
+                                      })}
+                                      {run.fillingBatchIds.map(id => {
+                                        const b = batches.find(x => x.id === id);
+                                        return <Badge key={id} variant="secondary" className="text-[8px] bg-amber-50 text-amber-700 border-amber-200">{b?.code}</Badge>;
+                                      })}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </>
                         )
                       })}
                    </TableBody>

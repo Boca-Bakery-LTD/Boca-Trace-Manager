@@ -33,12 +33,27 @@ export default function DoughBatches() {
   
   const [formData, setFormData] = useState({
     name: "",
+    recipeId: "",
     code: `DOUGH-${todayDDMMYY}`,
     createdByUserId: "",
-    selectedIngredients: [] as string[]
+    selectedIngredients: [] as string[],
+    customLotSelections: {} as Record<string, string> // typeId -> lotId
   });
 
   const today = format(new Date(), "yyyy-MM-dd");
+
+  const handleRecipeChange = (recipeName: string) => {
+    const recipe = doughRecipes.find(r => r.name === recipeName);
+    if (recipe) {
+      setFormData(prev => ({
+        ...prev,
+        name: recipeName,
+        recipeId: recipe.id,
+        selectedIngredients: recipe.ingredientTypeIds,
+        customLotSelections: {} // Reset custom selections when recipe changes
+      }));
+    }
+  };
 
   const handleCreate = () => {
     if (!formData.name || !formData.createdByUserId || formData.selectedIngredients.length === 0) {
@@ -47,9 +62,13 @@ export default function DoughBatches() {
     }
 
     const ingredientLotIds = formData.selectedIngredients.map(typeId => {
+      // Use custom selection if available, otherwise fallback to daily log active lot
+      if (formData.customLotSelections[typeId]) {
+        return formData.customLotSelections[typeId];
+      }
       const activeLot = getActiveLotForDate(today, typeId);
       return activeLot?.id;
-    }).filter(Boolean) as string[];
+    }).filter((id: any): id is string => id !== undefined);
 
     if (ingredientLotIds.length === 0) {
       toast({ title: "Error", description: "No active lots found. Check Daily Log.", variant: "destructive" });
@@ -69,9 +88,11 @@ export default function DoughBatches() {
     setIsCreating(false);
     setFormData({
       name: "",
+      recipeId: "",
       code: `DOUGH-${todayDDMMYY}`,
       createdByUserId: "",
-      selectedIngredients: []
+      selectedIngredients: [],
+      customLotSelections: {}
     });
   };
 
@@ -115,7 +136,7 @@ export default function DoughBatches() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                  <Label>Select Recipe</Label>
-                 <Select value={formData.name} onValueChange={v => setFormData({...formData, name: v})}>
+                 <Select value={formData.name} onValueChange={handleRecipeChange}>
                     <SelectTrigger className="text-lg font-medium h-12">
                       <SelectValue placeholder="Select recipe..." />
                     </SelectTrigger>
@@ -141,27 +162,53 @@ export default function DoughBatches() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {ingredientTypes.filter(i => i.active).map(type => {
                   const activeLot = getActiveLotForDate(today, type.id);
+                  const availableLots = getLotsForIngredient(type.id);
                   const isSelected = formData.selectedIngredients.includes(type.id);
                   
                   return (
                     <div 
                       key={type.id}
-                      onClick={() => activeLot && toggleIngredient(type.id)}
                       className={cn(
-                        "flex items-start gap-3 p-3 rounded border cursor-pointer transition-all",
+                        "flex flex-col gap-2 p-3 rounded border transition-all",
                         isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/50",
-                        !activeLot && "opacity-50 cursor-not-allowed bg-muted"
+                        !activeLot && "opacity-50 bg-muted"
                       )}
                     >
-                      <Checkbox checked={isSelected} disabled={!activeLot} />
-                      <div className="flex-1">
-                        <p className="font-bold text-sm">{type.name}</p>
-                        {activeLot ? (
-                           <p className="text-xs font-mono text-muted-foreground mt-1">Lot: {activeLot.batchCode}</p>
-                        ) : (
-                           <p className="text-xs text-rose-500 mt-1 uppercase font-bold">No active lot</p>
-                        )}
+                      <div className="flex items-start gap-3 cursor-pointer" onClick={() => activeLot && toggleIngredient(type.id)}>
+                        <Checkbox checked={isSelected} disabled={!activeLot} />
+                        <div className="flex-1">
+                          <p className="font-bold text-sm">{type.name}</p>
+                          {activeLot ? (
+                             <p className="text-[10px] font-mono text-muted-foreground mt-0.5">Active: {activeLot.batchCode}</p>
+                          ) : (
+                             <p className="text-[10px] text-rose-500 mt-0.5 uppercase font-bold">No active lot</p>
+                          )}
+                        </div>
                       </div>
+
+                      {isSelected && availableLots.length > 1 && (
+                        <div className="mt-2 pt-2 border-t border-primary/10">
+                          <Label className="text-[9px] uppercase text-muted-foreground font-bold mb-1 block">Override Batch</Label>
+                          <Select 
+                            value={formData.customLotSelections[type.id] || activeLot?.id || ""} 
+                            onValueChange={(val) => setFormData(prev => ({
+                              ...prev,
+                              customLotSelections: { ...prev.customLotSelections, [type.id]: val }
+                            }))}
+                          >
+                            <SelectTrigger className="h-7 text-[10px] font-mono">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableLots.map(lot => (
+                                <SelectItem key={lot.id} value={lot.id} className="text-[10px] font-mono">
+                                  {lot.batchCode}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

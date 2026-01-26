@@ -29,12 +29,27 @@ export default function FillingBatches() {
   
   const [formData, setFormData] = useState({
     name: "",
+    recipeId: "",
     code: `FILL-${todayDDMMYY}`,
     createdByUserId: "",
-    selectedIngredients: [] as string[]
+    selectedIngredients: [] as string[],
+    customLotSelections: {} as Record<string, string>
   });
 
   const today = format(new Date(), "yyyy-MM-dd");
+
+  const handleRecipeChange = (recipeName: string) => {
+    const recipe = fillingRecipes.find(r => r.name === recipeName);
+    if (recipe) {
+      setFormData(prev => ({
+        ...prev,
+        name: recipeName,
+        recipeId: recipe.id,
+        selectedIngredients: recipe.ingredientTypeIds,
+        customLotSelections: {}
+      }));
+    }
+  };
 
   const handleCreate = () => {
     if (!formData.name || !formData.createdByUserId || formData.selectedIngredients.length === 0) {
@@ -43,9 +58,12 @@ export default function FillingBatches() {
     }
 
     const ingredientLotIds = formData.selectedIngredients.map(typeId => {
+      if (formData.customLotSelections[typeId]) {
+        return formData.customLotSelections[typeId];
+      }
       const activeLot = getActiveLotForDate(today, typeId);
       return activeLot?.id;
-    }).filter(Boolean) as string[];
+    }).filter((id: any): id is string => id !== undefined);
 
     if (ingredientLotIds.length === 0) {
       toast({ title: "Error", description: "No active lots found.", variant: "destructive" });
@@ -65,9 +83,11 @@ export default function FillingBatches() {
     setIsCreating(false);
     setFormData({
       name: "",
+      recipeId: "",
       code: `FILL-${todayDDMMYY}`,
       createdByUserId: "",
-      selectedIngredients: []
+      selectedIngredients: [],
+      customLotSelections: {}
     });
   };
 
@@ -111,7 +131,7 @@ export default function FillingBatches() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                  <Label>Select Filling Recipe</Label>
-                 <Select value={formData.name} onValueChange={v => setFormData({...formData, name: v})}>
+                 <Select value={formData.name} onValueChange={handleRecipeChange}>
                     <SelectTrigger className="text-lg font-medium h-12">
                       <SelectValue placeholder="Select recipe..." />
                     </SelectTrigger>
@@ -137,27 +157,53 @@ export default function FillingBatches() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {ingredientTypes.filter(i => i.active).map(type => {
                   const activeLot = getActiveLotForDate(today, type.id);
+                  const availableLots = getLotsForIngredient(type.id);
                   const isSelected = formData.selectedIngredients.includes(type.id);
                   
                   return (
                     <div 
                       key={type.id}
-                      onClick={() => activeLot && toggleIngredient(type.id)}
                       className={cn(
-                        "flex items-start gap-3 p-3 rounded border cursor-pointer transition-all",
+                        "flex flex-col gap-2 p-3 rounded border transition-all",
                         isSelected ? "border-amber-600 bg-amber-50 ring-1 ring-amber-600" : "hover:bg-muted/50",
-                        !activeLot && "opacity-50 cursor-not-allowed bg-muted"
+                        !activeLot && "opacity-50 bg-muted"
                       )}
                     >
-                      <Checkbox checked={isSelected} disabled={!activeLot} className="data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600" />
-                      <div className="flex-1">
-                        <p className="font-bold text-sm">{type.name}</p>
-                        {activeLot ? (
-                           <p className="text-xs font-mono text-muted-foreground mt-1">Lot: {activeLot.batchCode}</p>
-                        ) : (
-                           <p className="text-xs text-rose-500 mt-1 uppercase font-bold">No active lot</p>
-                        )}
+                      <div className="flex items-start gap-3 cursor-pointer" onClick={() => activeLot && toggleIngredient(type.id)}>
+                        <Checkbox checked={isSelected} disabled={!activeLot} className="data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600" />
+                        <div className="flex-1">
+                          <p className="font-bold text-sm">{type.name}</p>
+                          {activeLot ? (
+                             <p className="text-[10px] font-mono text-muted-foreground mt-0.5">Active: {activeLot.batchCode}</p>
+                          ) : (
+                             <p className="text-[10px] text-rose-500 mt-0.5 uppercase font-bold">No active lot</p>
+                          )}
+                        </div>
                       </div>
+
+                      {isSelected && availableLots.length > 1 && (
+                        <div className="mt-2 pt-2 border-t border-amber-200">
+                          <Label className="text-[9px] uppercase text-muted-foreground font-bold mb-1 block">Override Batch</Label>
+                          <Select 
+                            value={formData.customLotSelections[type.id] || activeLot?.id || ""} 
+                            onValueChange={(val) => setFormData(prev => ({
+                              ...prev,
+                              customLotSelections: { ...prev.customLotSelections, [type.id]: val }
+                            }))}
+                          >
+                            <SelectTrigger className="h-7 text-[10px] font-mono border-amber-200">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableLots.map(lot => (
+                                <SelectItem key={lot.id} value={lot.id} className="text-[10px] font-mono">
+                                  {lot.batchCode}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

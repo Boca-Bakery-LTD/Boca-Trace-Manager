@@ -11,6 +11,7 @@ export interface Recipe {
   id: string;
   name: string;
   type: 'Dough' | 'Filling';
+  ingredientTypeIds: string[]; // Predefined ingredients
   active: boolean;
 }
 
@@ -175,10 +176,10 @@ interface BakeryStore {
 // --- Mock Data Initialization ---
 
 const INITIAL_RECIPES: Recipe[] = [
-  { id: 'r1', name: 'Standard Sourdough', type: 'Dough', active: true },
-  { id: 'r2', name: 'Brioche Dough', type: 'Dough', active: true },
-  { id: 'r3', name: 'Vanilla Custard', type: 'Filling', active: true },
-  { id: 'r4', name: 'Strawberry Jam', type: 'Filling', active: true },
+  { id: 'r1', name: 'Standard Sourdough', type: 'Dough', ingredientTypeIds: ['ing1', 'ing4', 'ing5'], active: true },
+  { id: 'r2', name: 'Brioche Dough', type: 'Dough', ingredientTypeIds: ['ing1', 'ing3', 'ing6', 'ing7'], active: true },
+  { id: 'r3', name: 'Vanilla Custard', type: 'Filling', ingredientTypeIds: ['ing9', 'ing7', 'ing5'], active: true },
+  { id: 'r4', name: 'Strawberry Jam', type: 'Filling', ingredientTypeIds: ['ing8', 'ing7'], active: true },
 ];
 
 const INITIAL_USERS: User[] = [
