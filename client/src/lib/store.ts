@@ -5,13 +5,19 @@ import { format } from 'date-fns';
 
 export type Role = 'Admin' | 'Manager' | 'Staff';
 export type StorageCondition = 'Ambient' | 'Chilled' | 'Frozen';
-export type Unit = 'kg' | 'g' | 'L' | 'pcs' | 'bag' | 'box';
+export type Unit = 'kg' | 'g' | 'L' | 'ml' | 'pcs' | 'bag' | 'box';
+
+export interface RecipeIngredient {
+  ingredientTypeId: string;
+  quantity: number;
+  unit: Unit;
+}
 
 export interface Recipe {
   id: string;
   name: string;
   type: 'Dough' | 'Filling';
-  ingredientTypeIds: string[]; // Predefined ingredients
+  ingredients: RecipeIngredient[];
   active: boolean;
 }
 
@@ -157,6 +163,7 @@ interface BakeryStore {
   addIngredientType: (ingredient: Omit<IngredientType, 'id'>) => void;
   removeIngredientType: (id: string) => void;
   addRecipe: (recipe: Omit<Recipe, 'id'>) => void;
+  updateRecipe: (id: string, recipe: Partial<Recipe>) => void;
   removeRecipe: (id: string) => void;
   addProduct: (product: Omit<ProductCatalog, 'id'>) => void;
   updateProduct: (id: string, product: Partial<ProductCatalog>) => void;
@@ -176,10 +183,26 @@ interface BakeryStore {
 // --- Mock Data Initialization ---
 
 const INITIAL_RECIPES: Recipe[] = [
-  { id: 'r1', name: 'Standard Sourdough', type: 'Dough', ingredientTypeIds: ['ing1', 'ing4', 'ing5'], active: true },
-  { id: 'r2', name: 'Brioche Dough', type: 'Dough', ingredientTypeIds: ['ing1', 'ing3', 'ing6', 'ing7'], active: true },
-  { id: 'r3', name: 'Vanilla Custard', type: 'Filling', ingredientTypeIds: ['ing9', 'ing7', 'ing5'], active: true },
-  { id: 'r4', name: 'Strawberry Jam', type: 'Filling', ingredientTypeIds: ['ing8', 'ing7'], active: true },
+  { id: 'r1', name: 'Standard Sourdough', type: 'Dough', ingredients: [
+    { ingredientTypeId: 'ing1', quantity: 10, unit: 'kg' },
+    { ingredientTypeId: 'ing4', quantity: 200, unit: 'g' },
+    { ingredientTypeId: 'ing5', quantity: 7, unit: 'L' }
+  ], active: true },
+  { id: 'r2', name: 'Brioche Dough', type: 'Dough', ingredients: [
+    { ingredientTypeId: 'ing1', quantity: 5, unit: 'kg' },
+    { ingredientTypeId: 'ing3', quantity: 100, unit: 'g' },
+    { ingredientTypeId: 'ing6', quantity: 1, unit: 'kg' },
+    { ingredientTypeId: 'ing7', quantity: 500, unit: 'g' }
+  ], active: true },
+  { id: 'r3', name: 'Vanilla Custard', type: 'Filling', ingredients: [
+    { ingredientTypeId: 'ing9', quantity: 2, unit: 'kg' },
+    { ingredientTypeId: 'ing7', quantity: 300, unit: 'g' },
+    { ingredientTypeId: 'ing5', quantity: 1, unit: 'L' }
+  ], active: true },
+  { id: 'r4', name: 'Strawberry Jam', type: 'Filling', ingredients: [
+    { ingredientTypeId: 'ing8', quantity: 5, unit: 'kg' },
+    { ingredientTypeId: 'ing7', quantity: 1, unit: 'kg' }
+  ], active: true },
 ];
 
 const INITIAL_USERS: User[] = [
@@ -244,6 +267,10 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
 
   addRecipe: (recipe) => set((state) => ({
     recipes: [...state.recipes, { ...recipe, id: Math.random().toString(36).substr(2, 9), active: true }]
+  })),
+
+  updateRecipe: (id, recipe) => set((state) => ({
+    recipes: state.recipes.map(r => r.id === id ? { ...r, ...recipe } : r)
   })),
 
   removeRecipe: (id) => set((state) => ({

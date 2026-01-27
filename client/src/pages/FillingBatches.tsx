@@ -46,7 +46,7 @@ export default function FillingBatches() {
         ...prev,
         name: recipeName,
         recipeId: recipe.id,
-        selectedIngredients: recipe.ingredientTypeIds,
+        selectedIngredients: recipe.ingredients.map(ri => ri.ingredientTypeId),
         customLotSelections: {}
       }));
     }

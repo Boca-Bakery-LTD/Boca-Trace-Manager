@@ -50,7 +50,7 @@ export default function DoughBatches() {
         ...prev,
         name: recipeName,
         recipeId: recipe.id,
-        selectedIngredients: recipe.ingredientTypeIds,
+        selectedIngredients: recipe.ingredients.map(ri => ri.ingredientTypeId),
         customLotSelections: {} // Reset custom selections when recipe changes
       }));
     }
