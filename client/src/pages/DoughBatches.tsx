@@ -166,6 +166,10 @@ export default function DoughBatches() {
                   const availableLots = getLotsForIngredient(type.id);
                   const isSelected = formData.selectedIngredients.includes(type.id);
                   
+                  // Find measurement from recipe if applicable
+                  const currentRecipe = doughRecipes.find(r => r.id === formData.recipeId);
+                  const recipeIngredient = currentRecipe?.ingredients.find(ri => ri.ingredientTypeId === type.id);
+                  
                   return (
                     <div 
                       key={type.id}
@@ -178,7 +182,14 @@ export default function DoughBatches() {
                       <div className="flex items-start gap-3 cursor-pointer" onClick={() => activeLot && toggleIngredient(type.id)}>
                         <Checkbox checked={isSelected} disabled={!activeLot} />
                         <div className="flex-1">
-                          <p className="font-bold text-sm">{type.name}</p>
+                          <div className="flex justify-between items-start gap-2">
+                            <p className="font-bold text-sm">{type.name}</p>
+                            {recipeIngredient && (
+                              <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold whitespace-nowrap">
+                                {recipeIngredient.quantity}{recipeIngredient.unit}
+                              </span>
+                            )}
+                          </div>
                           {activeLot ? (
                              <p className="text-[10px] font-mono text-muted-foreground mt-0.5">Active: {activeLot.batchCode}</p>
                           ) : (
