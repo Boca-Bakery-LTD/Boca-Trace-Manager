@@ -20,9 +20,7 @@ export default function Traceability() {
     ingredientTypes,
     doughBatchIngredients,
     fillingBatchIngredients,
-    productionRunDoughBatches,
-    productionRunFillingBatches,
-    receivingReports,
+    productCatalog,
     users,
     addAuditLog
   } = useBakeryStore();
@@ -191,10 +189,170 @@ export default function Traceability() {
         </TabsContent>
 
         <TabsContent value="product" className="space-y-4">
-          {searched && (
-             <div className="p-12 text-center border rounded-lg bg-muted/5 text-muted-foreground">
-               Results will appear here based on your data entry.
-             </div>
+          {searched && productResults.length === 0 && (
+            <div className="p-12 text-center border rounded-lg bg-muted/5 text-muted-foreground">
+              No product runs found matching "{query}".
+            </div>
+          )}
+          {productResults.map(run => (
+            <Card key={run.id} className="border-emerald-200">
+              <CardHeader className="bg-emerald-50/50">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="text-emerald-700 font-mono">Batch: {run.productBatchCode}</CardTitle>
+                    <CardDescription>{format(new Date(run.runDate), "PPP")}</CardDescription>
+                  </div>
+                  <Badge className="bg-emerald-600">Production Run</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-6">
+                <div>
+                  <h4 className="text-sm font-bold uppercase text-muted-foreground mb-3">Products Produced</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {Object.entries(run.quantities).map(([productId, qty]: [string, any]) => {
+                      const product = productCatalog.find(p => p.id === productId);
+                      return (
+                        <div key={productId} className="flex justify-between items-center p-3 border rounded bg-white shadow-sm">
+                          <span className="font-medium">{product?.name}</span>
+                          <Badge variant="secondary" className="text-lg">{qty}</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t">
+                  <div>
+                    <h4 className="text-sm font-bold uppercase text-muted-foreground mb-3">Dough Batches Used</h4>
+                    <div className="space-y-2">
+                      {run.doughBatchIds.map(id => {
+                        const b = batches.find(x => x.id === id);
+                        return (
+                          <div key={id} className="p-2 border rounded bg-blue-50/30 flex justify-between items-center">
+                            <span className="font-mono text-sm font-bold">{b?.code}</span>
+                            <span className="text-xs text-muted-foreground">{b?.name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold uppercase text-muted-foreground mb-3">Filling Batches Used</h4>
+                    <div className="space-y-2">
+                      {run.fillingBatchIds.map(id => {
+                        const b = batches.find(x => x.id === id);
+                        return (
+                          <div key={id} className="p-2 border rounded bg-amber-50/30 flex justify-between items-center">
+                            <span className="font-mono text-sm font-bold">{b?.code}</span>
+                            <span className="text-xs text-muted-foreground">{b?.name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </TabsContent>
+
+        <TabsContent value="ingredient" className="space-y-6">
+          {searched && ingredientResults && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-6 text-center">
+                    <p className="text-sm font-medium text-muted-foreground">Matched Lots</p>
+                    <p className="text-3xl font-bold">{ingredientResults.lots.length}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6 text-center">
+                    <p className="text-sm font-medium text-muted-foreground">Affected Batches</p>
+                    <p className="text-3xl font-bold">{ingredientResults.batches.length}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6 text-center">
+                    <p className="text-sm font-medium text-muted-foreground">Affected Product Runs</p>
+                    <p className="text-3xl font-bold">{ingredientResults.runs.length}</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {ingredientResults.lots.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold">1. Ingredient Lot Identification</h3>
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Ingredient</TableHead><TableHead>Batch Code</TableHead><TableHead>Received</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {ingredientResults.lots.map(lot => (
+                        <TableRow key={lot.id}>
+                          <TableCell className="font-bold">{ingredientTypes.find(t => t.id === lot.ingredientTypeId)?.name}</TableCell>
+                          <TableCell className="font-mono">{lot.batchCode}</TableCell>
+                          <TableCell>{format(new Date(lot.receivedAt), "dd/MM/yy")}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {ingredientResults.batches.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold">2. Impacted Production Batches</h3>
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Batch Code</TableHead><TableHead>Recipe</TableHead><TableHead>Created</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {ingredientResults.batches.map(batch => (
+                        <TableRow key={batch.id}>
+                          <TableCell><Badge variant={batch.type === 'Dough' ? 'default' : 'secondary'}>{batch.type}</Badge></TableCell>
+                          <TableCell className="font-mono font-bold">{batch.code}</TableCell>
+                          <TableCell>{batch.name}</TableCell>
+                          <TableCell>{format(new Date(batch.createdAt), "dd/MM/yy HH:mm")}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {ingredientResults.runs.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold">3. Affected Finished Products</h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    {ingredientResults.runs.map(run => (
+                      <Card key={run.id} className="border-emerald-200">
+                        <CardHeader className="py-3 bg-emerald-50">
+                          <CardTitle className="text-sm font-mono flex justify-between items-center">
+                            <span>Batch: {run.productBatchCode}</span>
+                            <span className="text-muted-foreground font-sans text-xs">{format(new Date(run.runDate), "dd/MM/yy")}</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(run.quantities).map(([productId, qty]: [string, any]) => {
+                              const product = productCatalog.find(p => p.id === productId);
+                              return (
+                                <Badge key={productId} variant="outline" className="text-sm py-1">
+                                  {product?.name}: <span className="ml-1 font-bold text-emerald-700">{qty}</span>
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {ingredientResults.lots.length === 0 && (
+                <div className="p-12 text-center border rounded-lg bg-muted/5 text-muted-foreground">
+                  No ingredient lots found matching "{query}".
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
       </Tabs>
