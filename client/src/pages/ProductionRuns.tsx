@@ -32,7 +32,10 @@ export default function ProductionRuns() {
   const [presentOperators, setPresentOperators] = useState<string[]>(staff.map(u => u.id));
   
   // Daily Batches
-  const todayDoughBatches = batches.filter(b => b.type === 'Dough' && isSameDay(new Date(b.createdAt), today));
+  const todayDoughBatches = batches
+    .filter(b => b.type === 'Dough' && isSameDay(new Date(b.createdAt), today))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
   const todayFillingBatches = batches.filter(b => b.type === 'Filling' && isSameDay(new Date(b.createdAt), today));
   
   // Persistent filling selection logic: Use today's if exists, else most recent ever
@@ -43,11 +46,6 @@ export default function ProductionRuns() {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
   const handleFinishGroup = () => {
-    if (!leadOperatorId) {
-      toast({ title: "Error", description: "Select a Lead Operator", variant: "destructive" });
-      return;
-    }
-
     const finalQuantities: Record<string, number> = {};
     let hasEntries = false;
     
@@ -64,14 +62,14 @@ export default function ProductionRuns() {
       return;
     }
 
-    // Default batches used (all today's dough + current fillings)
-    const dIds = todayDoughBatches.map(b => b.id);
+    // Default batches used (most recent today's dough + current fillings)
+    const dIds = todayDoughBatches.slice(0, 1).map(b => b.id);
     const fIds = (todayFillingBatches.length > 0 ? todayFillingBatches : recentFillings.slice(0, 1)).map(b => b.id);
 
     createProductionRun({
       productBatchCode,
       runDate: new Date().toISOString(),
-      createdByUserId: leadOperatorId,
+      createdByUserId: presentOperators[0] || 'system',
       operatorIds: presentOperators,
       quantities: finalQuantities,
       doughBatchIds: dIds,
@@ -121,16 +119,6 @@ export default function ProductionRuns() {
                       {presentOperators.includes(u.id) ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Circle className="w-4 h-4 text-muted-foreground" />}
                       <span className={cn("text-sm font-medium", !presentOperators.includes(u.id) && "text-muted-foreground line-through")}>{u.name}</span>
                     </div>
-                    {presentOperators.includes(u.id) && (
-                      <Button 
-                        variant={leadOperatorId === u.id ? "default" : "ghost"}
-                        size="sm"
-                        className="h-6 text-[10px] uppercase font-bold"
-                        onClick={(e) => { e.stopPropagation(); setLeadOperatorId(u.id); }}
-                      >
-                        {leadOperatorId === u.id ? "Lead" : "Set Lead"}
-                      </Button>
-                    )}
                  </div>
                ))}
             </CardContent>
