@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Siren, AlertTriangle, CheckCircle2, Printer, Search, Package } from "lucide-react";
+import { Siren, AlertTriangle, CheckCircle2, Printer, Search, Package, Database } from "lucide-react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,9 +19,7 @@ export default function RecallTest() {
     ingredientTypes,
     doughBatchIngredients,
     fillingBatchIngredients,
-    productionRunDoughBatches,
-    productionRunFillingBatches,
-    receivingReports,
+    productCatalog,
     users,
     addAuditLog
   } = useBakeryStore();
@@ -74,16 +72,8 @@ export default function RecallTest() {
 
       // 3. Find runs using these batches
       impactedRuns = productionRuns.filter(run => {
-        const runDoughIds = productionRunDoughBatches
-          .filter(link => link.productionRunId === run.id)
-          .map(link => link.doughBatchId);
-        
-        const runFillingIds = productionRunFillingBatches
-          .filter(link => link.productionRunId === run.id)
-          .map(link => link.fillingBatchId);
-
-        return runDoughIds.some(id => batchIds.includes(id)) || 
-               runFillingIds.some(id => batchIds.includes(id));
+        return run.doughBatchIds.some(id => batchIds.includes(id)) || 
+               run.fillingBatchIds.some(id => batchIds.includes(id));
       });
 
     } else if (recallType === 'Batch') {
@@ -91,19 +81,16 @@ export default function RecallTest() {
       const batchIds = impactedBatches.map(b => b.id);
 
       impactedRuns = productionRuns.filter(run => {
-        const runDoughIds = productionRunDoughBatches
-          .filter(link => link.productionRunId === run.id)
-          .map(link => link.doughBatchId);
-        
-        const runFillingIds = productionRunFillingBatches
-          .filter(link => link.productionRunId === run.id)
-          .map(link => link.fillingBatchId);
-
-        return runDoughIds.some(id => batchIds.includes(id)) || 
-               runFillingIds.some(id => batchIds.includes(id));
+        return run.doughBatchIds.some(id => batchIds.includes(id)) || 
+               run.fillingBatchIds.some(id => batchIds.includes(id));
       });
     } else {
-      impactedRuns = productionRuns.filter(r => r.productBatchCode.includes(searchStr));
+      impactedRuns = productionRuns.filter(r => r.productBatchCode.toUpperCase().includes(searchStr));
+      
+      // For product batch recalls, we also want to show the specific dough/filling batches used
+      const doughIds = [...new Set(impactedRuns.flatMap(r => r.doughBatchIds))];
+      const fillingIds = [...new Set(impactedRuns.flatMap(r => r.fillingBatchIds))];
+      impactedBatches = batches.filter(b => doughIds.includes(b.id) || fillingIds.includes(b.id));
     }
 
     setTraceData({ impactedLots, impactedBatches, impactedRuns });
@@ -247,33 +234,50 @@ export default function RecallTest() {
           </div>
 
           <div className="space-y-6">
-            {/* Impacted Ingredients Section */}
-            {traceData.impactedLots.length > 0 && (
+            {/* Impacted Intermediate Batches Section */}
+            {traceData.impactedBatches.length > 0 && (
               <section className="space-y-2">
                 <h4 className="font-bold text-rose-900 flex items-center gap-2">
-                  <Package className="w-4 h-4" />
-                  Impacted Ingredient Lots (Receiving)
+                  <Database className="w-4 h-4" />
+                  Impacted Production Batches (Dough/Filling)
                 </h4>
                 <div className="bg-white rounded border overflow-hidden">
                   <Table>
                     <TableHeader className="bg-muted/30">
                       <TableRow>
                         <TableHead>Batch Code</TableHead>
-                        <TableHead>Ingredient</TableHead>
-                        <TableHead>Received Date</TableHead>
-                        <TableHead>Report Ref</TableHead>
+                        <TableHead>Recipe</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Products Made</TableHead>
+                        <TableHead>Date</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {traceData.impactedLots.map(lot => {
-                        const type = ingredientTypes.find(t => t.id === lot.ingredientTypeId);
-                        const report = receivingReports.find(r => r.id === lot.receivingReportId);
+                      {traceData.impactedBatches.map(batch => {
+                        const productsInBatch = productionRuns.filter(r => 
+                          r.doughBatchIds.includes(batch.id) || 
+                          r.fillingBatchIds.includes(batch.id)
+                        ).flatMap(r => Object.keys(r.quantities).map(pid => productCatalog.find(p => p.id === pid)?.name));
+                        
+                        const uniqueProducts = [...new Set(productsInBatch.filter(Boolean))];
+
                         return (
-                          <TableRow key={lot.id}>
-                            <TableCell className="font-mono font-bold text-rose-700">{lot.batchCode}</TableCell>
-                            <TableCell>{type?.name}</TableCell>
-                            <TableCell>{format(new Date(lot.receivedAt), "dd/MM/yyyy")}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{report?.reference || 'Direct Entry'}</TableCell>
+                          <TableRow key={batch.id}>
+                            <TableCell className="font-mono font-bold text-rose-700">{batch.code}</TableCell>
+                            <TableCell>{batch.name}</TableCell>
+                            <TableCell><Badge variant={batch.type === 'Dough' ? 'default' : 'secondary'}>{batch.type}</Badge></TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1">
+                                {uniqueProducts.length > 0 ? (
+                                  uniqueProducts.map((name, i) => (
+                                    <Badge key={i} variant="outline" className="text-[9px] bg-muted/50">{name}</Badge>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground italic">Not used in runs yet</span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{format(new Date(batch.createdAt), "dd/MM/yy HH:mm")}</TableCell>
                           </TableRow>
                         );
                       })}
@@ -306,15 +310,20 @@ export default function RecallTest() {
                           <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No impacted products found for this trace.</TableCell>
                         </TableRow>
                       ) : (
-                        traceData.impactedRuns.map(run => (
-                          <TableRow key={run.id} className="bg-rose-50/20">
-                            <TableCell className="font-mono font-bold text-rose-700">{run.productBatchCode}</TableCell>
-                            <TableCell className="font-medium">{run.productName}</TableCell>
-                            <TableCell className="text-xs">{format(new Date(run.runDate), "dd/MM/yyyy HH:mm")}</TableCell>
-                            <TableCell>{run.quantity}</TableCell>
-                            <TableCell className="text-xs">{users.find(u => u.id === run.createdByUserId)?.name}</TableCell>
-                          </TableRow>
-                        ))
+                        traceData.impactedRuns.flatMap(run => 
+                          Object.entries(run.quantities).map(([productId, qty]: [string, any]) => {
+                            const product = productCatalog.find(p => p.id === productId);
+                            return (
+                              <TableRow key={`${run.id}-${productId}`} className="bg-rose-50/20">
+                                <TableCell className="font-mono font-bold text-rose-700">{run.productBatchCode}</TableCell>
+                                <TableCell className="font-medium">{product?.name || 'Unknown Product'}</TableCell>
+                                <TableCell className="text-xs">{format(new Date(run.runDate), "dd/MM/yyyy HH:mm")}</TableCell>
+                                <TableCell className="font-bold">{qty}</TableCell>
+                                <TableCell className="text-xs">{users.find(u => u.id === run.createdByUserId)?.name}</TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )
                       )}
                     </TableBody>
                   </Table>
