@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, Truck, AlertTriangle, FileText, Trash2, Copy, Eye } from "lucide-react";
+import { Plus, Search, Truck, AlertTriangle, FileText, Trash2, Copy, Eye, Edit2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -29,8 +29,15 @@ export default function Inventory() {
     ingredientTypes, 
     users, 
     addReceivedLot, 
-    createReceivingReport 
+    updateReceivedLot,
+    removeReceivedLot,
+    createReceivingReport,
+    removeReceivingReport,
+    getCurrentUser
   } = useBakeryStore();
+
+  const currentUser = getCurrentUser();
+  const isAdmin = currentUser?.role === 'Admin';
 
   const { toast } = useToast();
   
@@ -350,27 +357,40 @@ export default function Inventory() {
              className="bg-white"
            />
            <div className="bg-white rounded-md border shadow-sm max-h-[500px] overflow-y-auto">
-             {receivedLots
-               .filter(l => !filter || l.batchCode.toLowerCase().includes(filter.toLowerCase()))
-               .sort((a,b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime())
-               .slice(0, 20)
-               .map(lot => {
-                 const type = ingredientTypes.find(t => t.id === lot.ingredientTypeId);
-                 return (
-                   <div key={lot.id} className="p-3 border-b last:border-0 hover:bg-muted/20">
-                     <div className="flex justify-between items-start mb-1">
-                       <span className="font-bold font-mono text-sm">{lot.batchCode}</span>
-                       <Badge variant="outline" className="text-[10px]">{lot.storage}</Badge>
-                     </div>
-                     <p className="text-sm font-medium">{type?.name}</p>
-                     <p className="text-xs text-muted-foreground mt-1 flex justify-between">
-                       <span>Qty: {lot.quantity} {lot.unit}</span>
-                       <span className={cn(new Date(lot.bestBefore) < new Date() ? "text-rose-500 font-bold" : "")}>BB: {lot.bestBefore}</span>
-                     </p>
-                   </div>
-                 )
-               })
-             }
+                      {receivedLots
+                        .filter(l => !filter || l.batchCode.toLowerCase().includes(filter.toLowerCase()))
+                        .sort((a,b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime())
+                        .slice(0, 20)
+                        .map(lot => {
+                          const type = ingredientTypes.find(t => t.id === lot.ingredientTypeId);
+                          return (
+                            <div key={lot.id} className="p-3 border-b last:border-0 hover:bg-muted/20 group relative">
+                              <div className="flex justify-between items-start mb-1">
+                                <span className="font-bold font-mono text-sm">{lot.batchCode}</span>
+                                <Badge variant="outline" className="text-[10px]">{lot.storage}</Badge>
+                              </div>
+                              <p className="text-sm font-medium">{type?.name}</p>
+                              <p className="text-xs text-muted-foreground mt-1 flex justify-between">
+                                <span>Qty: {lot.quantity} {lot.unit}</span>
+                                <span className={cn(new Date(lot.bestBefore) < new Date() ? "text-rose-500 font-bold" : "")}>BB: {lot.bestBefore}</span>
+                              </p>
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex gap-1 bg-white/80 p-1 rounded shadow-sm">
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
+                                  const newCode = prompt("New Batch Code:", lot.batchCode);
+                                  if (newCode) updateReceivedLot(lot.id, { batchCode: newCode });
+                                }}>
+                                  <Edit2 className="w-3 h-3" />
+                                </Button>
+                                {isAdmin && (
+                                  <Button variant="ghost" size="icon" className="h-6 w-6 text-rose-500" onClick={() => removeReceivedLot(lot.id)}>
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                      }
            </div>
         </div>
       </div>

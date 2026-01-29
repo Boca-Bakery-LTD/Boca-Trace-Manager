@@ -21,8 +21,12 @@ export default function Catalog() {
     addRecipe, 
     updateRecipe,
     removeRecipe,
-    ingredientTypes 
+    ingredientTypes,
+    getCurrentUser
   } = useBakeryStore();
+  
+  const user = getCurrentUser();
+  const isAdmin = user?.role === 'Admin';
   
   const { toast } = useToast();
   const [isAddingProduct, setIsAddingProduct] = useState(false);
@@ -182,9 +186,11 @@ export default function Catalog() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => removeProduct(p.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {isAdmin && (
+                      <Button variant="ghost" size="icon" onClick={() => removeProduct(p.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -352,12 +358,14 @@ export default function Catalog() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => startEditRecipe(r)} className="hover:bg-primary/10 text-primary">
+                      <Button variant="ghost" size="icon" onClick={() => startEditRecipe(r)} className={cn("hover:bg-primary/10 text-primary", !isAdmin && "opacity-50 pointer-events-none")}>
                         <Edit2 className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => removeRecipe(r.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {isAdmin && (
+                        <Button variant="ghost" size="icon" onClick={() => removeRecipe(r.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

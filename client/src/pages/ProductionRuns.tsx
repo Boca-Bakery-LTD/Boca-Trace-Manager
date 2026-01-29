@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Factory, Save, History, Users, CheckCircle2, Circle } from "lucide-react";
+import { Factory, Save, History, Users, CheckCircle2, Circle, Trash2 } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -17,8 +17,13 @@ export default function ProductionRuns() {
     productionRuns,
     productCatalog,
     users, 
-    createProductionRun 
+    createProductionRun,
+    getCurrentUser,
+    removeProductionRun
   } = useBakeryStore();
+  
+  const user = getCurrentUser();
+  const isAdmin = user?.role === 'Admin';
   
   const { toast } = useToast();
   const today = new Date();
@@ -233,7 +238,19 @@ export default function ProductionRuns() {
                               <TableCell className="text-xs">{format(new Date(run.runDate), "dd/MM/yy")}</TableCell>
                               <TableCell className="text-xs">{Object.keys(run.quantities).length} Products</TableCell>
                               <TableCell className="text-xs font-medium">{operator?.name}</TableCell>
-                              <TableCell className="text-right font-bold">{total}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <span className="font-bold">{total}</span>
+                                  {isAdmin && (
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-rose-500" onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeProductionRun(run.id);
+                                    }}>
+                                      <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
                             </TableRow>
                             {isExpanded && (
                               <TableRow className="bg-muted/20">

@@ -8,11 +8,11 @@ import {
   Search, 
   Siren, 
   Users, 
-  Settings,
   LogOut,
   Menu,
   History,
-  BookOpen
+  BookOpen,
+  FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -30,6 +30,7 @@ const NAV_ITEMS = [
   { label: "Recall Test", icon: Siren, href: "/recall" },
   { label: "Users", icon: Users, href: "/users" },
   { label: "Audit Log", icon: History, href: "/audit" },
+  { label: "Daily Report", icon: FileText, href: "/daily-report" },
 ];
 
 export default function Sidebar() {

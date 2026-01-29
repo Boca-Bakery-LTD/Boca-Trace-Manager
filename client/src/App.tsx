@@ -23,6 +23,8 @@ const PlaceHolder = ({ title }: { title: string }) => (
 );
 
 import Catalog from "@/pages/Catalog";
+import Users from "@/pages/Users";
+import DailyReport from "@/pages/DailyReport";
 
 function Router() {
   return (
@@ -35,10 +37,9 @@ function Router() {
       <Route path="/catalog" component={Catalog} />
       <Route path="/trace" component={Traceability} />
       <Route path="/recall" component={RecallTest} />
-      <Route path="/users">
-        <PlaceHolder title="User Management" />
-      </Route>
+      <Route path="/users" component={Users} />
       <Route path="/audit" component={AuditLog} />
+      <Route path="/daily-report" component={DailyReport} />
       <Route component={NotFound} />
     </Switch>
   );

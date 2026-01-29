@@ -21,8 +21,12 @@ export default function DailyLog() {
     getActiveLotForDate,
     getLotsForIngredient,
     addIngredientType,
-    removeIngredientType
+    removeIngredientType,
+    getCurrentUser
   } = useBakeryStore();
+
+  const user = getCurrentUser();
+  const isAdmin = user?.role === 'Admin';
 
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -46,9 +50,14 @@ export default function DailyLog() {
   const getArchivedLot = (typeId: string, activeLotId?: string) => {
     // Return the most recent lot that is NOT the active one
     const lots = getLotsForIngredient(typeId)
-      .filter(l => l.id !== activeLotId)
       .sort((a,b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
-    return lots[0]; // Return only 1 previous archived batch code
+    
+    // If we have an active lot, we just want to show the ONE previous one if it exists
+    if (activeLotId) {
+      const idx = lots.findIndex(l => l.id === activeLotId);
+      if (idx !== -1 && lots[idx + 1]) return lots[idx + 1];
+    }
+    return null;
   };
 
   return (
@@ -117,7 +126,7 @@ export default function DailyLog() {
                     {isExplicitlySetToday && (
                       <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-[10px] px-1.5 h-5">Updated</Badge>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => removeIngredientType(type.id)} className="h-6 w-6 text-muted-foreground hover:text-destructive">
+                    <Button variant="ghost" size="icon" onClick={() => removeIngredientType(type.id)} className={cn("h-6 w-6 text-muted-foreground hover:text-destructive", !isAdmin && "hidden")}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>

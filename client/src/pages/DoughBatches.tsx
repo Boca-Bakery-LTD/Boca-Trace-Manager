@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChefHat, Plus, Save, History, ArrowRight } from "lucide-react";
+import { ChefHat, Plus, Save, History, ArrowRight, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -21,9 +21,15 @@ export default function DoughBatches() {
     users, 
     recipes,
     createBatch,
+    doughBatchIngredients,
     getActiveLotForDate,
-    getLotsForIngredient
+    getLotsForIngredient,
+    getCurrentUser,
+    removeBatch
   } = useBakeryStore();
+  
+  const user = getCurrentUser();
+  const isAdmin = user?.role === 'Admin';
   
   const { toast } = useToast();
 
@@ -111,6 +117,18 @@ export default function DoughBatches() {
 
   const doughBatches = batches.filter(b => b.type === 'Dough').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const doughRecipes = recipes.filter(r => r.type === 'Dough' && r.active);
+
+  const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
+
+  const getIngredientsForBatch = (batch: any) => {
+    return doughBatchIngredients
+      .filter(bi => bi.doughBatchId === batch.id)
+      .map(bi => {
+        const lot = receivedLots.find(l => l.id === bi.receivedLotId);
+        const type = ingredientTypes.find(t => t.id === lot?.ingredientTypeId);
+        return { name: type?.name, code: lot?.batchCode };
+      });
+  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-20">
@@ -273,17 +291,49 @@ export default function DoughBatches() {
               </TableRow>
             </TableHeader>
             <TableBody>
-               {doughBatches.map(batch => (
-                 <TableRow key={batch.id}>
-                   <TableCell className="font-mono text-xs">{format(new Date(batch.createdAt), "HH:mm")}</TableCell>
-                   <TableCell className="font-mono font-bold text-primary">{batch.code}</TableCell>
-                   <TableCell className="font-medium">{batch.name}</TableCell>
-                   <TableCell className="text-xs text-muted-foreground">
-                     {batch.ingredientLotIds.length} lots
-                   </TableCell>
-                   <TableCell>{users.find(u => u.id === batch.createdByUserId)?.name}</TableCell>
-                 </TableRow>
-               ))}
+               {doughBatches.map(batch => {
+                 const isExpanded = expandedBatchId === batch.id;
+                 const ingredients = getIngredientsForBatch(batch);
+                 return (
+                   <>
+                     <TableRow key={batch.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setExpandedBatchId(isExpanded ? null : batch.id)}>
+                       <TableCell className="font-mono text-xs">{format(new Date(batch.createdAt), "HH:mm")}</TableCell>
+                       <TableCell className="font-mono font-bold text-primary">{batch.code}</TableCell>
+                       <TableCell className="font-medium">{batch.name}</TableCell>
+                       <TableCell className="text-xs text-muted-foreground">
+                         {batch.ingredientLotIds.length} ingredients
+                       </TableCell>
+                       <TableCell>
+                         <div className="flex items-center gap-2">
+                           {users.find(u => u.id === batch.createdByUserId)?.name}
+                           {isAdmin && (
+                             <Button variant="ghost" size="icon" className="h-6 w-6 text-rose-500 ml-auto" onClick={(e) => {
+                               e.stopPropagation();
+                               removeBatch(batch.id);
+                             }}>
+                               <Trash2 className="w-3 h-3" />
+                             </Button>
+                           )}
+                         </div>
+                       </TableCell>
+                     </TableRow>
+                     {isExpanded && (
+                       <TableRow className="bg-muted/20">
+                         <TableCell colSpan={5} className="p-4">
+                           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                             {ingredients.map((ing, i) => (
+                               <div key={i} className="flex justify-between items-center p-2 border rounded bg-white text-[10px]">
+                                 <span className="font-medium">{ing.name}</span>
+                                 <span className="font-mono font-bold text-primary">{ing.code}</span>
+                               </div>
+                             ))}
+                           </div>
+                         </TableCell>
+                       </TableRow>
+                     )}
+                   </>
+                 );
+               })}
             </TableBody>
           </Table>
         </CardContent>

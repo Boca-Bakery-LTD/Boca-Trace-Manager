@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { UtensilsCrossed, Plus, Save, History } from "lucide-react";
+import { UtensilsCrossed, Plus, Save, History, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -16,12 +16,19 @@ export default function FillingBatches() {
   const { 
     batches, 
     ingredientTypes, 
+    receivedLots,
     users, 
     recipes,
     createBatch,
+    fillingBatchIngredients,
     getActiveLotForDate,
-    getLotsForIngredient
+    getLotsForIngredient,
+    getCurrentUser,
+    removeBatch
   } = useBakeryStore();
+  
+  const user = getCurrentUser();
+  const isAdmin = user?.role === 'Admin';
   
   const { toast } = useToast();
 
@@ -106,6 +113,18 @@ export default function FillingBatches() {
 
   const fillingBatches = batches.filter(b => b.type === 'Filling').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const fillingRecipes = recipes.filter(r => r.type === 'Filling' && r.active);
+
+  const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
+
+  const getIngredientsForBatch = (batch: any) => {
+    return fillingBatchIngredients
+      .filter(bi => bi.fillingBatchId === batch.id)
+      .map(bi => {
+        const lot = receivedLots.find(l => l.id === bi.receivedLotId);
+        const type = ingredientTypes.find(t => t.id === lot?.ingredientTypeId);
+        return { name: type?.name, code: lot?.batchCode };
+      });
+  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-20">
@@ -267,14 +286,46 @@ export default function FillingBatches() {
               </TableRow>
             </TableHeader>
             <TableBody>
-               {fillingBatches.map(batch => (
-                 <TableRow key={batch.id}>
-                   <TableCell className="font-mono text-xs">{format(new Date(batch.createdAt), "HH:mm")}</TableCell>
-                   <TableCell className="font-mono font-bold text-amber-700">{batch.code}</TableCell>
-                   <TableCell className="font-medium">{batch.name}</TableCell>
-                   <TableCell>{users.find(u => u.id === batch.createdByUserId)?.name}</TableCell>
-                 </TableRow>
-               ))}
+               {fillingBatches.map(batch => {
+                 const isExpanded = expandedBatchId === batch.id;
+                 const ingredients = getIngredientsForBatch(batch);
+                 return (
+                   <>
+                     <TableRow key={batch.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setExpandedBatchId(isExpanded ? null : batch.id)}>
+                       <TableCell className="font-mono text-xs">{format(new Date(batch.createdAt), "HH:mm")}</TableCell>
+                       <TableCell className="font-mono font-bold text-amber-700">{batch.code}</TableCell>
+                       <TableCell className="font-medium">{batch.name}</TableCell>
+                       <TableCell>
+                         <div className="flex items-center gap-2">
+                           {users.find(u => u.id === batch.createdByUserId)?.name}
+                           {isAdmin && (
+                             <Button variant="ghost" size="icon" className="h-6 w-6 text-rose-500 ml-auto" onClick={(e) => {
+                               e.stopPropagation();
+                               removeBatch(batch.id);
+                             }}>
+                               <Trash2 className="w-3 h-3" />
+                             </Button>
+                           )}
+                         </div>
+                       </TableCell>
+                     </TableRow>
+                     {isExpanded && (
+                       <TableRow className="bg-muted/20">
+                         <TableCell colSpan={4} className="p-4">
+                           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                             {ingredients.map((ing, i) => (
+                               <div key={i} className="flex justify-between items-center p-2 border rounded bg-white text-[10px]">
+                                 <span className="font-medium">{ing.name}</span>
+                                 <span className="font-mono font-bold text-amber-600">{ing.code}</span>
+                               </div>
+                             ))}
+                           </div>
+                         </TableCell>
+                       </TableRow>
+                     )}
+                   </>
+                 );
+               })}
             </TableBody>
           </Table>
         </CardContent>

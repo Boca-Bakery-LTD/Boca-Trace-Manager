@@ -160,6 +160,7 @@ interface BakeryStore {
 
   // Actions
   addUser: (user: Omit<User, 'id'>) => void;
+  removeUser: (id: string) => void;
   addIngredientType: (ingredient: Omit<IngredientType, 'id'>) => void;
   removeIngredientType: (id: string) => void;
   addRecipe: (recipe: Omit<Recipe, 'id'>) => void;
@@ -169,15 +170,22 @@ interface BakeryStore {
   updateProduct: (id: string, product: Partial<ProductCatalog>) => void;
   removeProduct: (id: string) => void;
   addReceivedLot: (lot: Omit<ReceivedLot, 'id'>) => void;
+  updateReceivedLot: (id: string, lot: Partial<ReceivedLot>) => void;
+  removeReceivedLot: (id: string) => void;
   createReceivingReport: (report: Omit<ReceivingReport, 'id' | 'lotIds'>, lots: Omit<ReceivedLot, 'id' | 'receivingReportId'>[]) => void;
+  removeReceivingReport: (id: string) => void;
   updateDailyLog: (date: string, ingredientTypeId: string, lotId: string) => void;
+  removeDailyLogEntry: (id: string) => void;
   createBatch: (batch: Omit<Batch, 'id'>) => void;
+  removeBatch: (id: string) => void;
   createProductionRun: (run: Omit<ProductionRun, 'id'>) => void;
+  removeProductionRun: (id: string) => void;
   addAuditLog: (action: string, details: string, userId: string, entityType?: string, entityId?: string) => void;
   
   // Helpers
   getLotsForIngredient: (typeId: string) => ReceivedLot[];
   getActiveLotForDate: (date: string, typeId: string) => ReceivedLot | undefined;
+  getCurrentUser: () => User;
 }
 
 // --- Mock Data Initialization ---
@@ -257,6 +265,10 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
     users: [...state.users, { ...user, id: Math.random().toString(36).substr(2, 9) }] 
   })),
 
+  removeUser: (id) => set((state) => ({
+    users: state.users.filter(u => u.id !== id)
+  })),
+
   addIngredientType: (ing) => set((state) => ({
     ingredientTypes: [...state.ingredientTypes, { ...ing, id: Math.random().toString(36).substr(2, 9), active: true }]
   })),
@@ -299,6 +311,14 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
     get().addAuditLog('RECEIVE_GOODS', `Received ${lot.batchCode}`, lot.receivedByUserId, 'ReceivedLot', id);
   },
 
+  updateReceivedLot: (id, lot) => set((state) => ({
+    receivedLots: state.receivedLots.map(l => l.id === id ? { ...l, ...lot } : l)
+  })),
+
+  removeReceivedLot: (id) => set((state) => ({
+    receivedLots: state.receivedLots.filter(l => l.id !== id)
+  })),
+
   createReceivingReport: (report, lots) => {
     const reportId = Math.random().toString(36).substr(2, 9);
     
@@ -325,6 +345,10 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
     get().addAuditLog('CREATE_RECEIVING_REPORT', `Created Report with ${newLots.length} lines`, report.receivedByUserId, 'ReceivingReport', reportId);
   },
 
+  removeReceivingReport: (id) => set((state) => ({
+    receivingReports: state.receivingReports.filter(r => r.id !== id)
+  })),
+
   updateDailyLog: (date, ingredientTypeId, lotId) => {
     set((state) => {
       // Remove existing entry for this day/ingredient if exists
@@ -339,8 +363,13 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
         }]
       };
     });
-    get().addAuditLog('UPDATE_DAILY_LOG', `Set active lot for ing ${ingredientTypeId} to ${lotId}`, 'current-user');
+    const currentUserName = get().users[0]?.name || 'system';
+    get().addAuditLog('UPDATE_DAILY_LOG', `Set active lot for ing ${ingredientTypeId} to ${lotId}`, currentUserName);
   },
+
+  removeDailyLogEntry: (id) => set((state) => ({
+    dailyLog: state.dailyLog.filter(e => e.id !== id)
+  })),
 
   createBatch: (batch) => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -370,6 +399,10 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
     get().addAuditLog('CREATE_BATCH', `Created ${batch.type} batch ${batch.code}`, batch.createdByUserId, 'Batch', id);
   },
 
+  removeBatch: (id) => set((state) => ({
+    batches: state.batches.filter(b => b.id !== id)
+  })),
+
   createProductionRun: (run) => {
     const id = Math.random().toString(36).substr(2, 9);
     set((state) => ({
@@ -377,6 +410,10 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
     }));
     get().addAuditLog('CREATE_PRODUCTION_GROUP', `Created production group ${run.productBatchCode}`, run.createdByUserId, 'ProductionRun', id);
   },
+
+  removeProductionRun: (id) => set((state) => ({
+    productionRuns: state.productionRuns.filter(r => r.id !== id)
+  })),
 
   addAuditLog: (action, details, userId, entityType, entityId) => {
     set((state) => ({
@@ -408,6 +445,11 @@ export const useBakeryStore = create<BakeryStore>((set, get) => ({
       .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
     
     return lots[0];
+  },
+
+  getCurrentUser: () => {
+    const state = get();
+    return state.users[0]; // John Doe is the first user (Manager/Admin)
   }
 }));
 
